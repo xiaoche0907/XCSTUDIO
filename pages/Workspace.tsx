@@ -245,6 +245,13 @@ const Workspace: React.FC = () => {
 
     const [zoom, setZoom] = useState(30);
     const [pan, setPan] = useState({ x: 0, y: 0 });
+    const zoomRef = useRef(30);
+    const panRef = useRef({ x: 0, y: 0 });
+
+    useEffect(() => {
+        zoomRef.current = zoom;
+        panRef.current = pan;
+    }, [zoom, pan]);
     const [elements, setElements] = useState<CanvasElement[]>([]);
     const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
     const [editingTextId, setEditingTextId] = useState<string | null>(null);
@@ -1361,22 +1368,28 @@ const Workspace: React.FC = () => {
                 const mouseX = e.clientX - rect.left;
                 const mouseY = e.clientY - rect.top;
 
-                setZoom(oldZoom => {
-                    const delta = e.deltaY > 0 ? -10 : 10;
-                    const newZoom = Math.max(10, Math.min(500, oldZoom + delta));
+                const oldZoom = zoomRef.current;
+                const oldPan = panRef.current;
 
-                    // We want the point under the cursor to remain exactly where it is on screen.
-                    // mouse_canvas_X = (mouseX - panX) / (oldZoom/100)
-                    // new_panX = mouseX - mouse_canvas_X * (newZoom/100)
-                    const tempScale = oldZoom / 100;
-                    const newTempScale = newZoom / 100;
+                // Dynamic zoom step for both trackpads (small deltaY) and mice (large deltaY)
+                let step = Math.max(1, Math.min(20, Math.abs(e.deltaY) * 0.1));
+                const delta = e.deltaY > 0 ? -step : step;
+                const newZoom = Math.max(10, Math.min(500, oldZoom + delta));
 
-                    setPan(oldPan => ({
-                        x: mouseX - ((mouseX - oldPan.x) / tempScale) * newTempScale,
-                        y: mouseY - ((mouseY - oldPan.y) / tempScale) * newTempScale
-                    }));
-                    return newZoom;
-                });
+                // The mathematical offset to keep the mouse stationary under the document is:
+                // NewPan = MouseCoord - (MouseCoord - OldPan) * (NewZoom / OldZoom)
+                const zoomFactor = newZoom / oldZoom;
+
+                const newPan = {
+                    x: mouseX - (mouseX - oldPan.x) * zoomFactor,
+                    y: mouseY - (mouseY - oldPan.y) * zoomFactor
+                };
+
+                zoomRef.current = newZoom;
+                panRef.current = newPan;
+
+                setZoom(newZoom);
+                setPan(newPan);
             } else {
                 if (e.ctrlKey) { e.preventDefault(); return; }
                 const target = e.target as HTMLElement | null;
@@ -1385,10 +1398,15 @@ const Workspace: React.FC = () => {
                     return;
                 }
                 e.preventDefault();
-                setPan(oldPan => ({
+
+                const oldPan = panRef.current;
+                const newPan = {
                     x: oldPan.x - e.deltaX,
                     y: oldPan.y - e.deltaY
-                }));
+                };
+
+                panRef.current = newPan;
+                setPan(newPan);
             }
         };
 
