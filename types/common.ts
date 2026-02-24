@@ -3,7 +3,7 @@ export type ShapeType = 'square' | 'circle' | 'triangle' | 'star' | 'bubble' | '
 
 export interface CanvasElement {
   id: string;
-  type: 'image' | 'video' | 'shape' | 'text' | 'gen-image' | 'gen-video';
+  type: 'image' | 'video' | 'shape' | 'text' | 'gen-image' | 'gen-video' | 'group';
   url?: string;
   shapeType?: ShapeType;
   // Text specific properties
@@ -27,9 +27,10 @@ export interface CanvasElement {
 
   // Gen Image/Video specific
   genPrompt?: string;
-  genModel?: 'Nano Banana' | 'Nano Banana Pro' | 'Veo 3.1' | 'Veo 3.1 Fast';
+  genModel?: 'Nano Banana' | 'Nano Banana Pro' | 'Veo 3.1' | 'Veo 3.1 Fast' | 'Kling 2.6';
   genAspectRatio?: string;
   genResolution?: '1K' | '2K' | '4K';
+  detectedTexts?: { original: string, edited?: string }[];
 
   // Image Gen Reference
   genRefImage?: string;
@@ -38,8 +39,9 @@ export interface CanvasElement {
   genStartFrame?: string;
   genEndFrame?: string;
   genVideoRefs?: string[];
-  genDuration?: '5s' | '10s';
-  genFirstLastMode?: boolean; // Toggle for "Start/End Frame" mode in Veo 3.1
+  genDuration?: '4s' | '6s' | '8s' | '5s' | '10s'; // keeping 5s/10s for legacy
+  genQuality?: '720p' | '1080p' | '4k';
+  genFirstLastMode?: 'startEnd' | 'multiRef'; // Toggle for "Start/End Frame" vs "Multi Ref" in Veo 3.1
 
   isGenerating?: boolean;
 
@@ -48,6 +50,12 @@ export interface CanvasElement {
   width: number;
   height: number;
   zIndex: number;
+
+  // Group support
+  groupId?: string;
+  children?: string[];
+  isCollapsed?: boolean;
+  originalChildData?: Record<string, { x: number; y: number; width: number; height: number; zIndex: number }>;
 }
 
 export interface Marker {

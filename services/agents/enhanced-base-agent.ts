@@ -714,9 +714,36 @@ ${(attachments || []).map((file, index) => {
                 cleaned = codeBlockMatch[1].trim();
             }
 
-            return JSON.parse(cleaned);
+            cleaned = cleaned.replace(/,\s*([\]}])/g, '$1'); // Fix common trailing comma json errors
+
+            const parsed = JSON.parse(cleaned);
+
+            if (Array.isArray(parsed)) {
+                return { proposals: parsed, message: "为您生成了以下方案" };
+            }
+
+            return parsed;
         } catch (error) {
-            console.warn('[Agent] JSON parse failed, using fallback');
+            console.warn('[Agent] JSON parse failed, trying more aggressive extraction');
+
+            try {
+                const matchObject = response.match(/\{[\s\S]*\}/);
+                const matchArray = response.match(/\[[\s\S]*\]/);
+
+                if (matchObject && (!matchArray || matchObject[0].length > matchArray[0].length)) {
+                    let cleanedData = matchObject[0].replace(/,\s*([\]}])/g, '$1');
+                    return JSON.parse(cleanedData);
+                } else if (matchArray) {
+                    let cleanedData = matchArray[0].replace(/,\s*([\]}])/g, '$1');
+                    const parsed = JSON.parse(cleanedData);
+                    if (Array.isArray(parsed)) {
+                        return { proposals: parsed, message: "为您生成了以下方案" };
+                    }
+                }
+            } catch (e2) {
+                console.warn('[Agent] Deep JSON extraction failed too', e2);
+            }
+
             return { message: response, skillCalls: [] };
         }
     }

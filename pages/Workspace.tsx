@@ -279,7 +279,7 @@ const Workspace: React.FC = () => {
     const [showModelPicker, setShowModelPicker] = useState(false);
     const [showRatioPicker, setShowRatioPicker] = useState(false);
     const [showResPicker, setShowResPicker] = useState(false);
-    const [videoToolbarTab, setVideoToolbarTab] = useState<'frames' | 'motion'>('frames');
+    const [videoToolbarTab, setVideoToolbarTab] = useState<'frames' | 'motion' | 'multi'>('frames');
     const [showFramePanel, setShowFramePanel] = useState(false);
     const [showFastEdit, setShowFastEdit] = useState(false);
     const [fastEditPrompt, setFastEditPrompt] = useState('');
@@ -404,9 +404,19 @@ const Workspace: React.FC = () => {
 
     // 视频生成器相关状态
     const [videoGenRatio, setVideoGenRatio] = useState('16:9');
-    const [videoGenDuration, setVideoGenDuration] = useState('5s');
+    const [videoGenDuration, setVideoGenDuration] = useState('8s');
+    const [videoGenQuality, setVideoGenQuality] = useState('1080p');
+    const [videoGenModel, setVideoGenModel] = useState<'Veo 3.1' | 'Veo 3.1 Fast' | 'Kling 2.6'>('Veo 3.1 Fast');
+    const [videoGenMode, setVideoGenMode] = useState<'startEnd' | 'multiRef'>('startEnd');
+
+    // 视频上传数据状态
     const [videoStartFrame, setVideoStartFrame] = useState<File | null>(null);
     const [videoEndFrame, setVideoEndFrame] = useState<File | null>(null);
+    const [videoMultiRefs, setVideoMultiRefs] = useState<File[]>([]);
+
+    // 悬停展开与面板状态
+    const [isVideoPanelHovered, setIsVideoPanelHovered] = useState(false);
+    const [showVideoModelPicker, setShowVideoModelPicker] = useState(false);
 
     // Legacy agent mode (keeping for compatibility)
     const [agentMode, setAgentMode] = useState(true);
@@ -902,7 +912,11 @@ const Workspace: React.FC = () => {
                 if (updates.genAspectRatio && updates.genAspectRatio !== el.genAspectRatio) {
                     const [w, h] = updates.genAspectRatio.split(':').map(Number);
                     const ratio = w / h;
-                    updatedEl.height = el.width / ratio;
+                    if (el.width && el.height) {
+                        const area = el.width * el.height;
+                        updatedEl.width = Math.sqrt(area * ratio);
+                        updatedEl.height = Math.sqrt(area / ratio);
+                    }
                 }
                 if (el.aspectRatioLocked && !updates.genAspectRatio) {
                     if (updates.width && !updates.height) {
@@ -1337,7 +1351,7 @@ const Workspace: React.FC = () => {
         window.addEventListener('click', handleGlobalClick);
         window.addEventListener('paste', handleWindowPaste);
 
-        // Native wheel listener for non-passive behavior (Prevent Browser Zoom)
+        // Native wheel listener for non-passive behavior (Prevent Browser Zoom and enable Pan)
         const onWheel = (e: WheelEvent) => {
             if (e.ctrlKey || e.metaKey) {
                 e.preventDefault();
@@ -1347,19 +1361,34 @@ const Workspace: React.FC = () => {
                 const mouseX = e.clientX - rect.left;
                 const mouseY = e.clientY - rect.top;
 
-                const oldZoom = zoom;
-                const delta = e.deltaY > 0 ? -10 : 10;
-                const newZoom = Math.max(10, Math.min(500, oldZoom + delta));
-                const scale = newZoom / oldZoom;
+                setZoom(oldZoom => {
+                    const delta = e.deltaY > 0 ? -10 : 10;
+                    const newZoom = Math.max(10, Math.min(500, oldZoom + delta));
 
-                // 调整 pan 使鼠标指向的画布点保持不动
-                const newPanX = mouseX - (mouseX - pan.x) * scale;
-                const newPanY = mouseY - (mouseY - pan.y) * scale;
+                    // We want the point under the cursor to remain exactly where it is on screen.
+                    // mouse_canvas_X = (mouseX - panX) / (oldZoom/100)
+                    // new_panX = mouseX - mouse_canvas_X * (newZoom/100)
+                    const tempScale = oldZoom / 100;
+                    const newTempScale = newZoom / 100;
 
-                setZoom(newZoom);
-                setPan({ x: newPanX, y: newPanY });
+                    setPan(oldPan => ({
+                        x: mouseX - ((mouseX - oldPan.x) / tempScale) * newTempScale,
+                        y: mouseY - ((mouseY - oldPan.y) / tempScale) * newTempScale
+                    }));
+                    return newZoom;
+                });
             } else {
-                if (e.ctrlKey) e.preventDefault();
+                if (e.ctrlKey) { e.preventDefault(); return; }
+                const target = e.target as HTMLElement | null;
+                // Allow scrolling in popovers/modals/textareas/sidebars
+                if (target?.closest('.overflow-y-auto, textarea, input, .history-popover-content, .sidebar, .right-sidebar')) {
+                    return;
+                }
+                e.preventDefault();
+                setPan(oldPan => ({
+                    x: oldPan.x - e.deltaX,
+                    y: oldPan.y - e.deltaY
+                }));
             }
         };
 
@@ -1434,6 +1463,20 @@ const Workspace: React.FC = () => {
                     if (k === 'V') { e.preventDefault(); distributeSelectedElements('vertical'); return; }
                     if (k === 'A') { e.preventDefault(); distributeSelectedElements('auto'); return; }
                 }
+                // Group / Merge / Ungroup shortcuts
+                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'g') {
+                    e.preventDefault();
+                    if (e.shiftKey) {
+                        // Ctrl+Shift+G: merge or ungroup
+                        const sel = elements.find(el => el.id === selectedElementId);
+                        if (sel?.type === 'group') { handleUngroupSelected(); }
+                        else if (selectedElementIds.length > 1) { handleMergeSelected(); }
+                    } else {
+                        // Ctrl+G: group
+                        if (selectedElementIds.length > 1) { handleGroupSelected(); }
+                    }
+                    return;
+                }
                 if (e.key.toLowerCase() === 'v' && !(e.metaKey || e.ctrlKey)) setActiveTool('select');
                 if (e.key.toLowerCase() === 'h' && !e.altKey) setActiveTool('hand');
                 if (e.key.toLowerCase() === 'm') setActiveTool('mark');
@@ -1488,7 +1531,33 @@ const Workspace: React.FC = () => {
 
     const addText = () => { const containerW = window.innerWidth - (showAssistant ? 400 : 0); const containerH = window.innerHeight; const centerX = (containerW / 2 - pan.x) / (zoom / 100); const centerY = (containerH / 2 - pan.y) / (zoom / 100); const newElement: CanvasElement = { id: Date.now().toString(), type: 'text', text: 'Type something...', x: centerX - 100, y: centerY - 25, width: 200, height: 50, fontSize: 90, fontFamily: 'Inter', fontWeight: 400, fillColor: '#000000', strokeColor: 'transparent', textAlign: 'left', zIndex: elements.length + 1 }; const newElements = [...elements, newElement]; setElements(newElements); saveToHistory(newElements, markers); setSelectedElementId(newElement.id); };
     const addGenImage = () => { const containerW = window.innerWidth - (showAssistant ? 400 : 0); const containerH = window.innerHeight; const centerX = (containerW / 2 - pan.x) / (zoom / 100); const centerY = (containerH / 2 - pan.y) / (zoom / 100); const newElement: CanvasElement = { id: Date.now().toString(), type: 'gen-image', x: centerX - 512, y: centerY - 512, width: 1024, height: 1024, zIndex: elements.length + 1, genModel: 'Nano Banana Pro', genAspectRatio: '1:1', genResolution: '1K', genPrompt: '' }; const newElements = [...elements, newElement]; setElements(newElements); saveToHistory(newElements, markers); setSelectedElementId(newElement.id); };
-    const addGenVideo = () => { const containerW = window.innerWidth - (showAssistant ? 400 : 0); const containerH = window.innerHeight; const centerX = (containerW / 2 - pan.x) / (zoom / 100); const centerY = (containerH / 2 - pan.y) / (zoom / 100); const newElement: CanvasElement = { id: Date.now().toString(), type: 'gen-video', x: centerX - 960, y: centerY - 540, width: 1920, height: 1080, zIndex: elements.length + 1, genModel: 'Veo 3.1 Fast', genAspectRatio: '16:9', genPrompt: '', genDuration: '5s' }; const newElements = [...elements, newElement]; setElements(newElements); saveToHistory(newElements, markers); setSelectedElementId(newElement.id); };
+    const addGenVideo = () => {
+        const containerW = window.innerWidth - (showAssistant ? 400 : 0);
+        const containerH = window.innerHeight;
+        const centerX = (containerW / 2 - pan.x) / (zoom / 100);
+        const centerY = (containerH / 2 - pan.y) / (zoom / 100);
+
+        // Initial logical size depending on aspect ratio
+        let startW = 1920;
+        let startH = 1080;
+        if (videoGenRatio === '9:16') { startW = 1080; startH = 1920; }
+        else if (videoGenRatio === '1:1') { startW = 1080; startH = 1080; }
+
+        const newElement: CanvasElement = {
+            id: Date.now().toString(), type: 'gen-video',
+            x: centerX - startW / 2, y: centerY - startH / 2,
+            width: startW, height: startH,
+            zIndex: elements.length + 1, genModel: videoGenModel, genAspectRatio: videoGenRatio,
+            genQuality: videoGenQuality as any, genPrompt: '', genDuration: videoGenDuration as any,
+            genStartFrame: videoStartFrame ? URL.createObjectURL(videoStartFrame) : undefined,
+            genEndFrame: videoEndFrame ? URL.createObjectURL(videoEndFrame) : undefined,
+            genVideoRefs: videoMultiRefs.map(f => URL.createObjectURL(f))
+        };
+        const newElements = [...elements, newElement];
+        setElements(newElements);
+        saveToHistory(newElements, markers);
+        setSelectedElementId(newElement.id);
+    };
 
     const getClosestAspectRatio = (width: number, height: number): string => { const ratio = width / height; let closest = '1:1'; let minDiff = Infinity; for (const ar of ASPECT_RATIOS) { const [w, h] = ar.value.split(':').map(Number); const r = w / h; const diff = Math.abs(ratio - r); if (diff < minDiff) { minDiff = diff; closest = ar.value; } } return closest; };
 
@@ -1563,24 +1632,163 @@ const Workspace: React.FC = () => {
     };
 
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'video') => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const result = event.target?.result as string;
-            if (type === 'image') {
-                const img = new Image();
-                img.onload = () => {
-                    addElement(type, result, { width: img.width, height: img.height });
-                    setShowInsertMenu(false);
-                };
-                img.src = result;
-            } else {
-                addElement(type, result);
-                setShowInsertMenu(false);
+        const files = Array.from(e.target.files || []).slice(0, 10); // Limit to 10 files
+        if (files.length === 0) return;
+
+        let addedCount = 0;
+        const newElementsToAppend: CanvasElement[] = [];
+
+        const checkDone = () => {
+            addedCount++;
+            if (addedCount === files.length) {
+                if (newElementsToAppend.length > 0) {
+                    const finalElements = [...elements, ...newElementsToAppend];
+                    setElements(finalElements);
+                    saveToHistory(finalElements, markers);
+                }
             }
         };
-        reader.readAsDataURL(file);
+
+        files.forEach((file, index) => {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const result = event.target?.result as string;
+                if (type === 'image') {
+                    const img = new Image();
+                    img.onload = () => {
+                        const containerW = window.innerWidth - (showAssistant ? 400 : 0);
+                        const containerH = window.innerHeight;
+                        const centerX = (containerW / 2 - pan.x) / (zoom / 100);
+                        const centerY = (containerH / 2 - pan.y) / (zoom / 100);
+
+                        let width = img.width;
+                        let height = img.height;
+                        const maxSize = 800;
+                        if (width > maxSize || height > maxSize) {
+                            const ratio = Math.min(maxSize / width, maxSize / height);
+                            width *= ratio;
+                            height *= ratio;
+                        }
+
+                        // Offset multiple images slightly
+                        const offset = index * 20;
+
+                        const newElement: CanvasElement = {
+                            id: Date.now().toString() + index,
+                            type: 'image',
+                            url: result,
+                            x: centerX - (width / 2) + offset,
+                            y: centerY - (height / 2) + offset,
+                            width,
+                            height,
+                            zIndex: elements.length + index + 1
+                        };
+                        newElementsToAppend.push(newElement);
+                        checkDone();
+                    };
+                    img.src = result;
+                } else {
+                    const containerW = window.innerWidth - (showAssistant ? 400 : 0);
+                    const containerH = window.innerHeight;
+                    const centerX = (containerW / 2 - pan.x) / (zoom / 100);
+                    const centerY = (containerH / 2 - pan.y) / (zoom / 100);
+                    const width = 800;
+                    const height = 450;
+                    const offset = index * 20;
+                    const newElement: CanvasElement = {
+                        id: Date.now().toString() + index,
+                        type: 'video',
+                        url: result,
+                        x: centerX - (width / 2) + offset,
+                        y: centerY - (height / 2) + offset,
+                        width,
+                        height,
+                        zIndex: elements.length + index + 1
+                    };
+                    newElementsToAppend.push(newElement);
+                    checkDone();
+                }
+            };
+            reader.readAsDataURL(file);
+        });
+
+        setShowInsertMenu(false);
+        if (e.target) e.target.value = ''; // Reset input
+    };
+
+    const handleCanvasDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/') || f.type.startsWith('video/')).slice(0, 10);
+        if (files.length === 0) return;
+
+        // Calculate drop point in canvas coordinates
+        const rect = containerRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        const dropX = e.clientX - rect.left;
+        const dropY = e.clientY - rect.top;
+        const canvasDropX = (dropX - pan.x) / (zoom / 100);
+        const canvasDropY = (dropY - pan.y) / (zoom / 100);
+
+        let addedCount = 0;
+        const newElementsToAppend: CanvasElement[] = [];
+        const checkDone = () => {
+            addedCount++;
+            if (addedCount === files.length && newElementsToAppend.length > 0) {
+                const finalElements = [...elements, ...newElementsToAppend];
+                setElements(finalElements);
+                saveToHistory(finalElements, markers);
+            }
+        };
+
+        files.forEach((file, index) => {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const result = event.target?.result as string;
+                if (file.type.startsWith('image/')) {
+                    const img = new Image();
+                    img.onload = () => {
+                        let width = img.width;
+                        let height = img.height;
+                        const maxSize = 800;
+                        if (width > maxSize || height > maxSize) {
+                            const ratio = Math.min(maxSize / width, maxSize / height);
+                            width *= ratio;
+                            height *= ratio;
+                        }
+                        const offset = index * 20;
+                        newElementsToAppend.push({
+                            id: Date.now().toString() + index,
+                            type: 'image',
+                            url: result,
+                            x: canvasDropX - (width / 2) + offset,
+                            y: canvasDropY - (height / 2) + offset,
+                            width,
+                            height,
+                            zIndex: elements.length + index + 1
+                        });
+                        checkDone();
+                    };
+                    img.src = result;
+                } else {
+                    const width = 800;
+                    const height = 450;
+                    const offset = index * 20;
+                    newElementsToAppend.push({
+                        id: Date.now().toString() + index,
+                        type: 'video',
+                        url: result,
+                        x: canvasDropX - (width / 2) + offset,
+                        y: canvasDropY - (height / 2) + offset,
+                        width,
+                        height,
+                        zIndex: elements.length + index + 1
+                    });
+                    checkDone();
+                }
+            };
+            reader.readAsDataURL(file);
+        });
     };
     const handleRefImageUpload = (e: React.ChangeEvent<HTMLInputElement>, elementId: string) => {
         const file = e.target.files?.[0];
@@ -1694,7 +1902,16 @@ const Workspace: React.FC = () => {
             // 智能对齐线计算（排除所有选中元素）
             const SNAP_THRESHOLD = 6;
             const guides: { type: 'h' | 'v', pos: number }[] = [];
-            const draggingIds = selectedElementIds.length > 1 ? selectedElementIds : [selectedElementId];
+            let draggingIds = selectedElementIds.length > 1 ? [...selectedElementIds] : [selectedElementId];
+            // Expand group children into draggingIds
+            for (const did of [...draggingIds]) {
+                const dEl = elements.find(e => e.id === did);
+                if (dEl?.type === 'group' && dEl.children) {
+                    for (const cid of dEl.children) {
+                        if (!draggingIds.includes(cid)) draggingIds.push(cid);
+                    }
+                }
+            }
             const others = elements.filter(el => !draggingIds.includes(el.id));
             const dragCX = newX + dragEl.width / 2;
             const dragCY = newY + dragEl.height / 2;
@@ -1750,11 +1967,20 @@ const Workspace: React.FC = () => {
                         dom.style.top = `${pos.y}px`;
                     }
                 }
+                const toolbarWrappers = document.querySelectorAll('.drag-floating-toolbar');
+                toolbarWrappers.forEach(toolbarWrapper => {
+                    const tw = toolbarWrapper as HTMLElement;
+                    const baseLeft = parseFloat(tw.getAttribute('data-base-left') || '0');
+                    const baseTop = parseFloat(tw.getAttribute('data-base-top') || '0');
+                    tw.style.left = `${baseLeft + totalDx * (zoom / 100)}px`;
+                    tw.style.top = `${baseTop + totalDy * (zoom / 100)}px`;
+                });
             });
         }
     };
 
     const handleMouseUp = () => {
+
         if (isResizing) {
             setIsResizing(false);
             setResizeHandle(null);
@@ -1924,20 +2150,37 @@ const Workspace: React.FC = () => {
         }
 
         if (id !== selectedElementId) setEditingTextId(null);
+        // If clicking a child of a non-collapsed group, select the group instead
+        let effectiveId = id;
+        const clickedEl = elements.find(e => e.id === id);
+        if (clickedEl?.groupId) {
+            const parentGroup = elements.find(e => e.id === clickedEl.groupId);
+            if (parentGroup && !parentGroup.isCollapsed) {
+                effectiveId = parentGroup.id;
+            }
+        }
         // 如果点击的元素已在多选列表中，保持多选状态（群拖）
-        if (selectedElementIds.length > 1 && selectedElementIds.includes(id)) {
-            setSelectedElementId(id);
+        if (selectedElementIds.length > 1 && selectedElementIds.includes(effectiveId)) {
+            setSelectedElementId(effectiveId);
             // 不重置 selectedElementIds
         } else {
-            setSelectedElementId(id);
-            setSelectedElementIds([id]);
+            setSelectedElementId(effectiveId);
+            setSelectedElementIds([effectiveId]);
         }
         setIsDraggingElement(true);
         setDragStart({ x: e.clientX, y: e.clientY });
-        const el = elements.find(e => e.id === id);
+        const el = elements.find(e => e.id === effectiveId);
         if (el) setElementStartPos({ x: el.x, y: el.y });
-        // 记录所有选中元素的初始位置（群拖用）
-        const draggingIds = (selectedElementIds.length > 1 && selectedElementIds.includes(id)) ? selectedElementIds : [id];
+        // 记录所有选中元素的初始位置（群拖用），展开 group children
+        let draggingIds = (selectedElementIds.length > 1 && selectedElementIds.includes(effectiveId)) ? [...selectedElementIds] : [effectiveId];
+        for (const did of [...draggingIds]) {
+            const dEl = elements.find(e => e.id === did);
+            if (dEl?.type === 'group' && dEl.children) {
+                for (const cid of dEl.children) {
+                    if (!draggingIds.includes(cid)) draggingIds.push(cid);
+                }
+            }
+        }
         const startMap: Record<string, { x: number, y: number }> = {};
         for (const did of draggingIds) {
             const d = elements.find(e => e.id === did);
@@ -2176,10 +2419,29 @@ const Workspace: React.FC = () => {
             fullMessage += ` [Analyzing ${markerFiles.length} marked regions]`;
         }
 
+        // Append video configuration if in video mode
+        if (creationMode === 'video') {
+            fullMessage += ` [🎬 Video Config - Model: ${videoGenModel}, Mode: ${videoGenMode}, Ratio: ${videoGenRatio}, Dur: ${videoGenDuration}, Qual: ${videoGenQuality}]`;
+            if (videoGenMode === 'startEnd') {
+                if (videoStartFrame) filesToSend.push(videoStartFrame);
+                if (videoEndFrame) filesToSend.push(videoEndFrame);
+            } else {
+                videoMultiRefs.forEach(f => filesToSend.push(f));
+            }
+            if (filesToSend.length) fullMessage += ` [Attached ${filesToSend.length} video reference frames]`;
+        }
+
         const newUserMsg: ChatMessage = { id: Date.now().toString(), role: 'user', text: fullMessage + (filesToSend.length > 0 ? ` [${filesToSend.length} files attached]` : ''), timestamp: Date.now() };
         setMessages(prev => [...prev, newUserMsg]);
         setInputBlocks([{ id: `text-${Date.now()}`, type: 'text', text: '' }]);
         setMarkers([]);
+
+        // Reset Video UI state after send
+        if (creationMode === 'video') {
+            setVideoStartFrame(null);
+            setVideoEndFrame(null);
+            setVideoMultiRefs([]);
+        }
         setIsTyping(true);
         if (chatSessionRef.current) {
             // Inject system instruction for formatting, hidden from user UI
@@ -2222,8 +2484,8 @@ const Workspace: React.FC = () => {
                     <button className="p-2 rounded-xl transition text-gray-400 hover:text-black hover:bg-gray-50"><Plus size={18} /></button>
                     <div className="absolute left-full top-0 pl-1 z-50 hidden group-hover/ins:block">
                         <div className="w-44 bg-white rounded-xl shadow-xl border border-gray-100 p-1.5 flex flex-col gap-0.5 animate-in fade-in slide-in-from-left-2 duration-200">
-                            <label className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-50 cursor-pointer transition"><ImagePlus size={16} /> 上传图片 <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, 'image')} /></label>
-                            <label className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-50 cursor-pointer transition"><Film size={16} /> 上传视频 <input type="file" accept="video/*" className="hidden" onChange={(e) => handleFileUpload(e, 'video')} /></label>
+                            <label className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-50 cursor-pointer transition"><ImagePlus size={16} /> 上传图片 <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => handleFileUpload(e, 'image')} /></label>
+                            <label className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-50 cursor-pointer transition"><Film size={16} /> 上传视频 <input type="file" accept="video/*" multiple className="hidden" onChange={(e) => handleFileUpload(e, 'video')} /></label>
                         </div>
                     </div>
                 </div>
@@ -2307,10 +2569,10 @@ const Workspace: React.FC = () => {
         );
     };
 
-    const renderTextToolbar = () => { if (!selectedElementId) return null; const el = elements.find(e => e.id === selectedElementId); if (!el || el.type !== 'text') return null; return (<div className="absolute top-24 left-1/2 -translate-x-1/2 bg-white rounded-xl shadow-lg border border-gray-200 p-1.5 flex items-center gap-1 z-40 animate-in fade-in slide-in-from-top-2"> <div className="relative"><button onClick={() => setShowFontPicker(!showFontPicker)} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-100 rounded-lg text-sm font-medium w-32 justify-between"><span className="truncate">{el.fontFamily}</span><ChevronDown size={12} /></button>{showFontPicker && (<div className="absolute top-full left-0 mt-1 w-48 max-h-60 overflow-y-auto bg-white rounded-xl shadow-xl border border-gray-100 p-1 z-50">{FONTS.map(font => (<button key={font} onClick={() => { updateSelectedElement({ fontFamily: font }); setShowFontPicker(false); }} className="w-full text-left px-3 py-2 hover:bg-gray-50 rounded-lg text-sm" style={{ fontFamily: font }}>{font}</button>))}</div>)}</div><div className="w-px h-4 bg-gray-200 mx-1"></div><button onClick={() => updateSelectedElement({ fontWeight: el.fontWeight === 700 ? 400 : 700 })} className={`p-1.5 rounded-lg ${el.fontWeight === 700 ? 'bg-gray-200 text-black' : 'hover:bg-gray-100 text-gray-600'}`}><BoldIcon size={16} /></button><button onClick={() => updateSelectedElement({ textDecoration: el.textDecoration === 'underline' ? 'none' : 'underline' })} className={`p-1.5 rounded-lg ${el.textDecoration === 'underline' ? 'bg-gray-200 text-black' : 'hover:bg-gray-100 text-gray-600'}`}><Underline size={16} /></button><div className="w-px h-4 bg-gray-200 mx-1"></div><div className="flex items-center gap-2 px-2"><div className="relative w-5 h-5 rounded-full overflow-hidden border border-gray-200 cursor-pointer shadow-sm"><input type="color" value={el.fillColor} onChange={(e) => updateSelectedElement({ fillColor: e.target.value })} className="absolute -top-2 -left-2 w-10 h-10 cursor-pointer p-0 border-0" /></div></div></div>); };
+    const renderTextToolbar = () => { if (!selectedElementId || selectedElementIds.length > 1) return null; const el = elements.find(e => e.id === selectedElementId); if (!el || el.type !== 'text') return null; return (<div className="absolute top-24 left-1/2 -translate-x-1/2 bg-white rounded-xl shadow-lg border border-gray-200 p-1.5 flex items-center gap-1 z-40 animate-in fade-in slide-in-from-top-2"> <div className="relative"><button onClick={() => setShowFontPicker(!showFontPicker)} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-100 rounded-lg text-sm font-medium w-32 justify-between"><span className="truncate">{el.fontFamily}</span><ChevronDown size={12} /></button>{showFontPicker && (<div className="absolute top-full left-0 mt-1 w-48 max-h-60 overflow-y-auto bg-white rounded-xl shadow-xl border border-gray-100 p-1 z-50">{FONTS.map(font => (<button key={font} onClick={() => { updateSelectedElement({ fontFamily: font }); setShowFontPicker(false); }} className="w-full text-left px-3 py-2 hover:bg-gray-50 rounded-lg text-sm" style={{ fontFamily: font }}>{font}</button>))}</div>)}</div><div className="w-px h-4 bg-gray-200 mx-1"></div><button onClick={() => updateSelectedElement({ fontWeight: el.fontWeight === 700 ? 400 : 700 })} className={`p-1.5 rounded-lg ${el.fontWeight === 700 ? 'bg-gray-200 text-black' : 'hover:bg-gray-100 text-gray-600'}`}><BoldIcon size={16} /></button><button onClick={() => updateSelectedElement({ textDecoration: el.textDecoration === 'underline' ? 'none' : 'underline' })} className={`p-1.5 rounded-lg ${el.textDecoration === 'underline' ? 'bg-gray-200 text-black' : 'hover:bg-gray-100 text-gray-600'}`}><Underline size={16} /></button><div className="w-px h-4 bg-gray-200 mx-1"></div><div className="flex items-center gap-2 px-2"><div className="relative w-5 h-5 rounded-full overflow-hidden border border-gray-200 cursor-pointer shadow-sm"><input type="color" value={el.fillColor} onChange={(e) => updateSelectedElement({ fillColor: e.target.value })} className="absolute -top-2 -left-2 w-10 h-10 cursor-pointer p-0 border-0" /></div></div></div>); };
 
     const renderShapeToolbar = () => {
-        if (!selectedElementId) return null;
+        if (!selectedElementId || selectedElementIds.length > 1) return null;
         const el = elements.find(e => e.id === selectedElementId);
         if (!el || el.type !== 'shape') return null;
         return (
@@ -2340,7 +2602,7 @@ const Workspace: React.FC = () => {
     };
 
     const renderImageToolbar = () => {
-        if (!selectedElementId) return null;
+        if (!selectedElementId || selectedElementIds.length > 1) return null;
         const el = elements.find(e => e.id === selectedElementId);
         if (!el || (el.type !== 'gen-image' && el.type !== 'image')) return null;
 
@@ -2354,7 +2616,7 @@ const Workspace: React.FC = () => {
         if (!el.url && el.type === 'gen-image') {
             const toolbarTop = screenY + screenHeight + 16;
             return (
-                <div className="absolute bg-white rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.08)] border border-gray-100 p-4 z-50 animate-in fade-in zoom-in-95 duration-200 w-[440px]" style={{ left: 0, top: 0, transform: `translate(calc(${centerX}px - 50%), ${toolbarTop}px)`, willChange: 'transform' }} onMouseDown={(e) => e.stopPropagation()}>
+                <div id="active-floating-toolbar" className="drag-floating-toolbar absolute bg-white rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.08)] border border-gray-100 p-4 z-50 animate-in fade-in zoom-in-95 duration-200 w-[440px]" data-base-left={centerX} data-base-top={toolbarTop} style={{ left: centerX, top: toolbarTop, transform: 'translateX(-50%)', willChange: 'transform, left, top' }} onMouseDown={(e) => e.stopPropagation()}>
                     <textarea
                         placeholder="今天我们要创作什么..."
                         className="w-full text-sm font-medium text-gray-700 placeholder:text-gray-300 bg-transparent border-none outline-none resize-none h-20 mb-4 p-1 leading-relaxed"
@@ -2462,38 +2724,36 @@ const Workspace: React.FC = () => {
                     style={{ left: modalLeft, top: modalTop }}
                     onMouseDown={(e) => e.stopPropagation()}
                 >
-                    <div className="flex items-center gap-2 text-gray-700 font-medium mb-1">
-                        <Type size={16} /> <span>编辑文字</span>
+                    <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm font-semibold text-gray-800">编辑图片文字</span>
+                        <button onClick={() => setShowTextEditModal(false)} className="text-gray-400 hover:text-black transition"><X size={14} /></button>
                     </div>
-                    {isExtractingText ? (
-                        <div className="flex flex-col items-center justify-center py-8 text-gray-400 gap-2">
-                            <Loader2 size={24} className="animate-spin" />
-                            <span className="text-xs">识别文字中...</span>
-                        </div>
-                    ) : (
+                    {el.detectedTexts && el.detectedTexts.length > 0 ? (
                         <>
-                            <div className="max-h-64 overflow-y-auto flex flex-col gap-2 no-scrollbar">
-                                {detectedTexts.map((text, index) => (
-                                    <input
-                                        key={index}
-                                        value={editedTexts[index]}
-                                        onChange={(e) => {
-                                            const newTexts = [...editedTexts];
-                                            newTexts[index] = e.target.value;
-                                            setEditedTexts(newTexts);
-                                        }}
-                                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition"
-                                    />
+                            <div className="max-h-48 overflow-y-auto pr-1 flex flex-col gap-2">
+                                {el.detectedTexts.map((dt, idx) => (
+                                    <div key={idx} className="flex flex-col gap-1">
+                                        <span className="text-[10px] text-gray-500 font-medium tracking-wide truncate">{dt.original}</span>
+                                        <input
+                                            value={dt.edited || dt.original}
+                                            onChange={(e) => {
+                                                const newTexts = [...(el.detectedTexts || [])];
+                                                newTexts[idx] = { ...newTexts[idx], edited: e.target.value };
+                                                updateSelectedElement({ detectedTexts: newTexts });
+                                            }}
+                                            className="w-full text-sm bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                            placeholder={dt.original}
+                                        />
+                                    </div>
                                 ))}
-                                {detectedTexts.length === 0 && <div className="text-xs text-gray-400 text-center py-4">未检测到文字</div>}
                             </div>
-                            <div className="flex gap-2 mt-2 pt-2 border-t border-gray-100">
-                                <button onClick={() => setShowTextEditModal(false)} className="flex-1 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 rounded-lg transition">取消</button>
-                                <button onClick={handleApplyTextEdits} className="flex-1 py-1.5 text-xs font-medium bg-gray-900 text-white hover:bg-black rounded-lg transition flex items-center justify-center gap-1">
-                                    应用修改 <Zap size={10} className="text-yellow-400" /> 10
-                                </button>
-                            </div>
+                            <button className="w-full mt-2 py-1.5 bg-black text-white text-sm rounded-lg hover:bg-gray-900 transition font-medium">应用修改</button>
                         </>
+                    ) : (
+                        <div className="py-4 flex flex-col items-center justify-center text-gray-400">
+                            <Type size={24} className="mb-2 opacity-50" />
+                            <span className="text-xs">未检测到可编辑文字</span>
+                        </div>
                     )}
                 </div>
             );
@@ -2558,7 +2818,7 @@ const Workspace: React.FC = () => {
 
         return (
             <>
-                <div className="absolute bg-white rounded-xl shadow-[0_4px_12px_rgba(0,0,0,0.08)] border border-gray-100 px-2 py-1.5 flex items-center gap-1 z-50 animate-in fade-in zoom-in-95 duration-200 whitespace-nowrap" style={{ left: 0, top: 0, transform: `translate(calc(${centerX}px - 50%), ${topToolbarTop}px)`, willChange: 'transform' }} onMouseDown={(e) => e.stopPropagation()}>
+                <div id="active-floating-toolbar" className={`drag-floating-toolbar absolute bg-white rounded-xl shadow-[0_4px_12px_rgba(0,0,0,0.08)] border border-gray-100 px-2 py-1.5 flex items-center gap-1 z-50 ${isDraggingElement ? '' : 'animate-in fade-in zoom-in-95 duration-200'} whitespace-nowrap`} data-base-left={centerX} data-base-top={topToolbarTop} style={{ left: centerX, top: topToolbarTop, transform: 'translateX(-50%)', willChange: 'transform, left, top' }} onMouseDown={(e) => e.stopPropagation()}>
 
                     {/* Upscale */}
                     <div className="relative">
@@ -2623,7 +2883,7 @@ const Workspace: React.FC = () => {
                 </div>
 
                 {showFastEdit ? (
-                    <div className="absolute bg-white rounded-xl shadow-lg border border-gray-200 p-2 z-50 animate-in fade-in zoom-in-95 duration-200 w-64" style={{ left: 0, top: 0, transform: `translate(calc(${centerX}px - 50%), ${bottomButtonTop}px)`, willChange: 'transform' }} onMouseDown={(e) => e.stopPropagation()}>
+                    <div id="active-floating-toolbar-fast-edit" className="drag-floating-toolbar absolute bg-white rounded-xl shadow-lg border border-gray-200 p-2 z-50 animate-in fade-in zoom-in-95 duration-200 w-64" data-base-left={centerX} data-base-top={bottomButtonTop} style={{ left: centerX, top: bottomButtonTop, transform: 'translateX(-50%)', willChange: 'transform, left, top' }} onMouseDown={(e) => e.stopPropagation()}>
                         <textarea autoFocus className="w-full text-sm text-gray-700 placeholder:text-gray-300 bg-transparent border-none outline-none resize-none h-16 mb-1 p-1" placeholder="Describe your edit here" value={fastEditPrompt} onChange={(e) => setFastEditPrompt(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleFastEditRun(); } e.stopPropagation(); }} />
                         <div className="flex justify-end">
                             <button onClick={handleFastEditRun} disabled={!fastEditPrompt || el.isGenerating} className="bg-gray-500 hover:bg-black text-white text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition disabled:opacity-50">
@@ -2633,7 +2893,7 @@ const Workspace: React.FC = () => {
                         </div>
                     </div>
                 ) : (
-                    <div onClick={() => setShowFastEdit(true)} className="absolute bg-white rounded-xl shadow-sm border border-gray-200 px-4 py-2 z-50 animate-in fade-in duration-300 flex items-center gap-2 cursor-pointer hover:shadow-md transition group" style={{ left: 0, top: 0, transform: `translate(calc(${centerX}px - 50%), ${bottomButtonTop}px)`, willChange: 'transform' }} onMouseDown={(e) => e.stopPropagation()}>
+                    <div id="active-floating-toolbar-fast-edit" onClick={() => setShowFastEdit(true)} className="drag-floating-toolbar absolute bg-white rounded-xl shadow-sm border border-gray-200 px-4 py-2 z-50 animate-in fade-in duration-300 flex items-center gap-2 cursor-pointer hover:shadow-md transition group" data-base-left={centerX} data-base-top={bottomButtonTop} style={{ left: centerX, top: bottomButtonTop, transform: 'translateX(-50%)', willChange: 'transform, left, top' }} onMouseDown={(e) => e.stopPropagation()}>
                         <span className="text-sm text-gray-700 font-medium group-hover:text-black">快捷编辑</span>
                         <span className="text-xs text-gray-400 border border-gray-200 rounded px-1.5 py-0.5 ml-1">Tab</span>
                     </div>
@@ -2643,7 +2903,7 @@ const Workspace: React.FC = () => {
     };
 
     const renderGenVideoToolbar = () => {
-        if (!selectedElementId) return null;
+        if (!selectedElementId || selectedElementIds.length > 1) return null;
         const el = elements.find(e => e.id === selectedElementId);
         if (!el || (el.type !== 'gen-video' && el.type !== 'video')) return null;
         const screenX = el.x * (zoom / 100) + pan.x;
@@ -2656,7 +2916,7 @@ const Workspace: React.FC = () => {
             const topToolbarTop = screenY - 60;
             const centerX = screenX + (screenWidth / 2);
             return (
-                <div className="absolute bg-white rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-gray-100/50 px-2 py-1.5 flex items-center gap-1 z-50 animate-in fade-in zoom-in-95 duration-200 whitespace-nowrap backdrop-blur-sm" style={{ left: 0, top: 0, transform: `translate(calc(${centerX}px - 50%), ${topToolbarTop}px)`, willChange: 'transform' }} onMouseDown={(e) => e.stopPropagation()}>
+                <div id="active-floating-toolbar" className={`drag-floating-toolbar absolute bg-white rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-gray-100/50 px-2 py-1.5 flex items-center gap-1 z-50 ${isDraggingElement ? '' : 'animate-in fade-in zoom-in-95 duration-200'} whitespace-nowrap backdrop-blur-sm`} data-base-left={centerX} data-base-top={topToolbarTop} style={{ left: centerX, top: topToolbarTop, transform: 'translateX(-50%)', willChange: 'transform, left, top' }} onMouseDown={(e) => e.stopPropagation()}>
                     <button className="px-2.5 py-1.5 text-gray-600 hover:text-black hover:bg-gray-50 rounded-lg flex items-center gap-2 text-xs font-medium transition-colors group">
                         <div className="border-[1.5px] border-current rounded-[3px] px-0.5 text-[8px] font-bold opacity-70 group-hover:opacity-100 transition-opacity">HD</div>
                         放大
@@ -2676,7 +2936,7 @@ const Workspace: React.FC = () => {
             const toolbarTop = screenY + screenHeight + 16;
             const centerX = screenX + (screenWidth / 2);
             return (
-                <div className="absolute bg-white rounded-2xl shadow-[0_4px_20px_rgb(0,0,0,0.08)] border border-gray-100 z-50 animate-in fade-in zoom-in-95 duration-200 min-w-[420px]" style={{ left: 0, top: 0, transform: `translate(calc(${centerX}px - 50%), ${toolbarTop}px)`, willChange: 'transform' }} onMouseDown={(e) => e.stopPropagation()}>
+                <div id="active-floating-toolbar" className="drag-floating-toolbar absolute bg-white rounded-2xl shadow-[0_4px_20px_rgb(0,0,0,0.08)] border border-gray-100 z-50 animate-in fade-in zoom-in-95 duration-200 min-w-[420px]" data-base-left={centerX} data-base-top={toolbarTop} style={{ left: centerX, top: toolbarTop, transform: 'translateX(-50%)', willChange: 'transform, left, top' }} onMouseDown={(e) => e.stopPropagation()}>
                     {/* Prompt textarea */}
                     <div className="p-3 pb-0">
                         <textarea placeholder="今天我们要创作什么" className="w-full text-sm text-gray-700 placeholder:text-gray-400 bg-transparent border-none outline-none resize-none h-16 p-1" value={el.genPrompt || ''} onChange={(e) => updateSelectedElement({ genPrompt: e.target.value })} onKeyDown={(e) => e.stopPropagation()} />
@@ -2723,52 +2983,171 @@ const Workspace: React.FC = () => {
                         </div>
                     )}
 
+                    {/* Multi-Ref Upload Panel */}
+                    {showFramePanel && videoToolbarTab === 'multi' && (
+                        <div className="px-3 pb-2 animate-in slide-in-from-top-2 duration-200 overflow-x-auto">
+                            <div className="flex items-center gap-3 py-2 w-max">
+                                {(el.genVideoRefs || []).map((refImage, index) => (
+                                    <div key={index} className="relative group/multiref shrink-0">
+                                        <div className="w-14 h-14 rounded-xl overflow-hidden border border-gray-200 relative cursor-pointer shadow-sm" onClick={() => document.getElementById(`multi-frame-${el.id}-${index}`)?.click()}>
+                                            <img src={refImage} className="w-full h-full object-cover" />
+                                            <div className="absolute -top-1.5 -right-1.5 bg-gray-600 text-white rounded-full p-0.5 cursor-pointer hover:bg-red-500 opacity-0 group-hover/multiref:opacity-100 transition z-10" onClick={(ev) => { ev.stopPropagation(); const newRefs = [...(el.genVideoRefs || [])]; newRefs.splice(index, 1); updateSelectedElement({ genVideoRefs: newRefs }); }}><X size={8} /></div>
+                                        </div>
+                                        <input type="file" id={`multi-frame-${el.id}-${index}`} className="hidden" accept="image/*" onChange={(e) => handleVideoRefUpload(e, 'ref', index)} />
+                                    </div>
+                                ))}
+                                {(el.genVideoRefs || []).length < 5 && (
+                                    <div className="relative group/upload shrink-0 w-14 h-14">
+                                        {/* Back stacked cards */}
+                                        <div className="absolute inset-0 bg-white border border-gray-200 rounded-xl transform rotate-[8deg] translate-x-1.5 translate-y-0.5 transition-transform group-hover/upload:rotate-[12deg] group-hover/upload:translate-x-2 z-0"></div>
+                                        <div className="absolute inset-0 bg-white border border-gray-200 rounded-xl transform rotate-[4deg] translate-x-1 translate-y-0.5 transition-transform group-hover/upload:rotate-[6deg] group-hover/upload:translate-x-1 z-0"></div>
+
+                                        <div onClick={() => document.getElementById(`multi-frame-new-${el.id}`)?.click()} className="relative w-full h-full bg-white border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-purple-400 hover:bg-purple-50/50 transition z-10">
+                                            <Plus size={16} className="text-gray-400 group-hover/upload:text-purple-500 transition" />
+                                            <span className="text-[10px] text-gray-400 group-hover/upload:text-purple-500 mt-0.5">多图参考</span>
+                                        </div>
+                                        <input type="file" id={`multi-frame-new-${el.id}`} className="hidden" accept="image/*" onChange={(e) => handleVideoRefUpload(e, 'ref')} />
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
                     {/* Bottom Controls Bar */}
-                    <div className="flex items-center justify-between px-3 py-2 border-t border-gray-100">
+                    <div className="flex items-center justify-between px-3 py-2 border-t border-gray-100 bg-white rounded-b-2xl">
                         {/* Left: Tabs */}
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1 bg-white rounded-full p-0.5 shadow-sm border border-gray-100">
                             <button
-                                onClick={() => { setVideoToolbarTab('frames'); setShowFramePanel(videoToolbarTab === 'frames' ? !showFramePanel : true); }}
-                                className={`px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5 transition border ${videoToolbarTab === 'frames' && showFramePanel ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}
+                                onClick={() => { updateSelectedElement({ genFirstLastMode: 'startEnd' }); setVideoToolbarTab('frames'); setShowFramePanel(videoToolbarTab === 'frames' ? !showFramePanel : true); }}
+                                className={`px-3 py-1 text-xs font-medium rounded-full transition-all ${el.genFirstLastMode !== 'multiRef' ? 'bg-purple-100 text-purple-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
                                 tabIndex={-1}
                             >
                                 首尾帧
                             </button>
-                            <button
-                                onClick={() => { setVideoToolbarTab('motion'); setShowFramePanel(false); }}
-                                className={`px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5 transition border ${videoToolbarTab === 'motion' ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}
-                                tabIndex={-1}
-                            >
-                                动作控制
-                            </button>
+                            {el.genModel === 'Veo 3.1' && (
+                                <button
+                                    onClick={() => { updateSelectedElement({ genFirstLastMode: 'multiRef' }); setVideoToolbarTab('multi'); setShowFramePanel(videoToolbarTab === 'multi' ? !showFramePanel : true); }}
+                                    className={`px-3 py-1 text-xs font-medium rounded-full transition-all ${el.genFirstLastMode === 'multiRef' ? 'bg-purple-100 text-purple-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
+                                    tabIndex={-1}
+                                >
+                                    多图参考
+                                </button>
+                            )}
+                            {el.genModel !== 'Veo 3.1' && el.genModel !== 'Veo 3.1 Fast' && (
+                                <button
+                                    onClick={() => { setVideoToolbarTab('motion'); setShowFramePanel(false); }}
+                                    className={`px-3 py-1 text-xs font-medium rounded-full transition-all ${videoToolbarTab === 'motion' ? 'bg-purple-100 text-purple-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
+                                    tabIndex={-1}
+                                >
+                                    动作控制
+                                </button>
+                            )}
                         </div>
 
                         {/* Right: Model, Ratio, Generate */}
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2">
+                            {/* Model Dropdown */}
                             <div className="relative">
-                                <button onClick={() => setShowModelPicker(!showModelPicker)} className="flex items-center gap-1.5 text-xs font-medium text-gray-700 hover:text-black transition" tabIndex={-1}>
-                                    <Box size={14} /><span>{el.genModel || 'Kling 2.6'}</span><ChevronDown size={10} />
+                                <button
+                                    onClick={() => setShowVideoModelPicker(!showVideoModelPicker)}
+                                    className="h-7 px-3 flex items-center gap-1.5 text-xs font-medium text-gray-700 hover:bg-black/5 rounded-full transition whitespace-nowrap"
+                                    tabIndex={-1}
+                                >
+                                    <Box size={14} /><span>{el.genModel || 'Veo 3.1'}</span>
+                                    <ChevronDown size={14} className={`text-gray-400 transition-transform ${showVideoModelPicker ? 'rotate-180' : ''}`} />
                                 </button>
-                                {showModelPicker && (
-                                    <div className="absolute bottom-full mb-2 right-0 w-40 bg-white rounded-xl shadow-xl border border-gray-100 p-1 z-50 grid grid-cols-1 gap-1">
-                                        {['Veo 3.1 Fast', 'Kling 2.6', 'Sora'].map(m => (<button key={m} onClick={() => { updateSelectedElement({ genModel: m as any }); setShowModelPicker(false); }} className="text-left px-2 py-1.5 hover:bg-gray-50 rounded-lg text-xs font-medium">{m}</button>))}
+                                {showVideoModelPicker && (
+                                    <div className="absolute bottom-full right-0 mb-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 p-1.5 z-50 animate-in fade-in zoom-in-95 duration-200">
+                                        <div className="px-2 py-1.5 text-[10px] text-gray-400 font-medium uppercase tracking-wider mb-0.5">选择视频模型</div>
+                                        <button
+                                            onClick={() => { updateSelectedElement({ genModel: 'Kling 2.6', genFirstLastMode: 'startEnd' }); setShowVideoModelPicker(false); setVideoToolbarTab('motion'); }}
+                                            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${el.genModel === 'Kling 2.6' ? 'bg-purple-50 text-purple-700 font-medium' : 'text-gray-700 hover:bg-gray-50'}`}
+                                        >
+                                            <span>Kling 2.6</span>
+                                            {el.genModel === 'Kling 2.6' && <Check size={14} />}
+                                        </button>
+                                        <button
+                                            onClick={() => { updateSelectedElement({ genModel: 'Veo 3.1', genFirstLastMode: 'startEnd' }); setShowVideoModelPicker(false); setVideoToolbarTab('frames'); }}
+                                            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${el.genModel === 'Veo 3.1' ? 'bg-purple-50 text-purple-700 font-medium' : 'text-gray-700 hover:bg-gray-50'}`}
+                                        >
+                                            <span>Veo 3.1</span>
+                                            {el.genModel === 'Veo 3.1' && <Check size={14} />}
+                                        </button>
+                                        <button
+                                            onClick={() => { updateSelectedElement({ genModel: 'Veo 3.1 Fast', genFirstLastMode: 'startEnd' }); setShowVideoModelPicker(false); setVideoToolbarTab('frames'); }}
+                                            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${el.genModel === 'Veo 3.1 Fast' ? 'bg-purple-50 text-purple-700 font-medium' : 'text-gray-700 hover:bg-gray-50'}`}
+                                        >
+                                            <span>Veo 3.1 Fast</span>
+                                            {el.genModel === 'Veo 3.1 Fast' && <Check size={14} />}
+                                        </button>
                                     </div>
                                 )}
                             </div>
 
+                            {/* Ratio / Duration / Quality Settings Popover */}
                             <div className="relative flex items-center">
-                                <button onClick={(e) => { e.stopPropagation(); setShowRatioPicker(!showRatioPicker); setShowResPicker(false); setShowModelPicker(false); }} className="text-xs font-medium text-gray-500 hover:text-black flex items-center gap-0.5" tabIndex={-1}>
-                                    {el.genAspectRatio || '16:9'} · {el.genDuration || '5s'} <ChevronDown size={10} />
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); setShowRatioPicker(!showRatioPicker); setShowVideoModelPicker(false); }}
+                                    className={`h-7 px-2.5 rounded-full border text-xs transition flex items-center gap-1 font-medium ${showRatioPicker ? 'border-purple-200 bg-purple-50 text-purple-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                                    tabIndex={-1}
+                                >
+                                    {el.genAspectRatio || '16:9'} · {el.genDuration || '8s'} · {el.genQuality || '1080p'}
+                                    <ChevronDown size={14} className={`transition-transform duration-200 ${showRatioPicker ? 'rotate-180 text-purple-600' : 'text-gray-400'}`} />
                                 </button>
                                 {showRatioPicker && (
-                                    <div className="absolute bottom-full mb-2 right-0 w-32 bg-white rounded-xl shadow-xl border border-gray-100 p-1 z-50 flex flex-col gap-0.5">
-                                        <div className="px-3 py-2 text-xs text-gray-400 font-medium">比例</div>
-                                        {VIDEO_RATIOS.map(ar => (
-                                            <button key={ar.value} onClick={() => { updateSelectedElement({ genAspectRatio: ar.value }); setShowRatioPicker(false); }} className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm transition ${el.genAspectRatio === ar.value ? 'bg-gray-100 text-black' : 'hover:bg-gray-50 text-gray-700'}`}>
-                                                <span>{ar.label}</span>
-                                                {(el.genAspectRatio || '16:9') === ar.value && <Check size={14} className="text-black" />}
-                                            </button>
-                                        ))}
+                                    <div className="absolute bottom-full right-0 mb-2 w-64 bg-white rounded-2xl shadow-2xl border border-gray-100 p-3 z-50 animate-in fade-in zoom-in-95 duration-200">
+                                        {/* Size section */}
+                                        <div className="mb-4">
+                                            <div className="text-[11px] text-gray-400 uppercase tracking-widest font-semibold mb-2">比例</div>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => updateSelectedElement({ genAspectRatio: '16:9' })}
+                                                    className={`flex-1 flex flex-col items-center justify-center py-3 rounded-xl border transition-all ${(el.genAspectRatio || '16:9') === '16:9' ? 'border-purple-500 bg-purple-50' : 'border-gray-200 hover:bg-gray-50 hover:border-gray-300'} gap-1.5`}
+                                                >
+                                                    <div className={`w-8 h-4 border-[1.5px] rounded-[3px] ${(el.genAspectRatio || '16:9') === '16:9' ? 'border-purple-500' : 'border-gray-400'}`}></div>
+                                                    <span className={`text-[12px] font-semibold ${(el.genAspectRatio || '16:9') === '16:9' ? 'text-purple-600' : 'text-gray-600'}`}>16:9</span>
+                                                </button>
+                                                <button
+                                                    onClick={() => updateSelectedElement({ genAspectRatio: '9:16' })}
+                                                    className={`flex-1 flex flex-col items-center justify-center py-3 rounded-xl border transition-all ${(el.genAspectRatio || '16:9') === '9:16' ? 'border-purple-500 bg-purple-50' : 'border-gray-200 hover:bg-gray-50 hover:border-gray-300'} gap-1.5`}
+                                                >
+                                                    <div className={`w-4 h-8 border-[1.5px] rounded-[3px] ${(el.genAspectRatio || '16:9') === '9:16' ? 'border-purple-500' : 'border-gray-400'}`}></div>
+                                                    <span className={`text-[12px] font-semibold ${(el.genAspectRatio || '16:9') === '9:16' ? 'text-purple-600' : 'text-gray-600'}`}>9:16</span>
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Duration section */}
+                                        <div className="mb-4">
+                                            <div className="text-[11px] text-gray-400 uppercase tracking-widest font-semibold mb-2">时长</div>
+                                            <div className="flex bg-gray-100 rounded-lg p-1">
+                                                {['4s', '6s', '8s'].map(dur => (
+                                                    <button
+                                                        key={dur}
+                                                        onClick={() => updateSelectedElement({ genDuration: dur as any })}
+                                                        className={`flex-1 py-1 text-[13px] font-semibold rounded-md transition-all ${(el.genDuration || '8s') === dur ? 'bg-white shadow border border-black/5 text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+                                                    >
+                                                        {dur}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Quality section */}
+                                        <div>
+                                            <div className="text-[11px] text-gray-400 uppercase tracking-widest font-semibold mb-2">画质</div>
+                                            <div className="flex bg-gray-100 rounded-lg p-1">
+                                                {['720p', '1080p', '4k'].map(quality => (
+                                                    <button
+                                                        key={quality}
+                                                        onClick={() => updateSelectedElement({ genQuality: quality as any })}
+                                                        className={`flex-1 py-1 text-[13px] font-semibold rounded-md transition-all ${(el.genQuality || '1080p') === quality ? 'bg-white shadow border border-black/5 text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+                                                    >
+                                                        {quality}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -2776,10 +3155,10 @@ const Workspace: React.FC = () => {
                             <button
                                 onClick={() => handleGenVideo(el.id)}
                                 disabled={!el.genPrompt || el.isGenerating}
-                                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${!el.genPrompt || el.isGenerating ? 'bg-gray-200 text-gray-400' : 'bg-gray-300 hover:bg-black text-white'}`}
+                                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${!el.genPrompt || el.isGenerating ? 'bg-gray-200 text-gray-400' : 'bg-[#E5E5EA] hover:bg-[#D1D1D6] text-black shadow-sm'}`}
                                 tabIndex={-1}
                             >
-                                {el.isGenerating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} fill="currentColor" />}
+                                {el.isGenerating ? <Loader2 size={16} className="animate-spin text-black" /> : <Sparkles size={16} fill="currentColor" />}
                             </button>
                         </div>
                     </div>
@@ -2874,6 +3253,79 @@ const Workspace: React.FC = () => {
         }
     };
 
+    // Group / Merge / Ungroup handlers
+    const handleGroupSelected = () => {
+        if (selectedElementIds.length < 2) return;
+        const ids = [...selectedElementIds];
+        saveToHistory(elements, markers);
+        const groupId = `group-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const targets = elements.filter(el => ids.includes(el.id));
+        const minX = Math.min(...targets.map(el => el.x));
+        const minY = Math.min(...targets.map(el => el.y));
+        const maxX = Math.max(...targets.map(el => el.x + el.width));
+        const maxY = Math.max(...targets.map(el => el.y + el.height));
+        const maxZ = Math.max(...targets.map(el => el.zIndex));
+        const originalChildData: Record<string, { x: number; y: number; width: number; height: number; zIndex: number }> = {};
+        for (const t of targets) {
+            originalChildData[t.id] = { x: t.x, y: t.y, width: t.width, height: t.height, zIndex: t.zIndex };
+        }
+        const newElements = elements.map(el => ids.includes(el.id) ? { ...el, groupId } : el);
+        const groupEl: CanvasElement = {
+            id: groupId, type: 'group' as const,
+            x: minX, y: minY, width: maxX - minX, height: maxY - minY,
+            zIndex: maxZ + 1, children: ids, isCollapsed: false, originalChildData,
+        };
+        setElements([...newElements, groupEl]);
+        setSelectedElementId(groupId);
+        setSelectedElementIds([groupId]);
+    };
+
+    const handleMergeSelected = () => {
+        if (selectedElementIds.length < 2) return;
+        const ids = [...selectedElementIds];
+        saveToHistory(elements, markers);
+        const groupId = `group-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const targets = elements.filter(el => ids.includes(el.id));
+        const minX = Math.min(...targets.map(el => el.x));
+        const minY = Math.min(...targets.map(el => el.y));
+        const maxX = Math.max(...targets.map(el => el.x + el.width));
+        const maxY = Math.max(...targets.map(el => el.y + el.height));
+        const maxZ = Math.max(...targets.map(el => el.zIndex));
+        const originalChildData: Record<string, { x: number; y: number; width: number; height: number; zIndex: number }> = {};
+        for (const t of targets) {
+            originalChildData[t.id] = { x: t.x, y: t.y, width: t.width, height: t.height, zIndex: t.zIndex };
+        }
+        const newElements = elements.map(el => ids.includes(el.id) ? { ...el, groupId } : el);
+        const groupEl: CanvasElement = {
+            id: groupId, type: 'group' as const,
+            x: minX, y: minY, width: maxX - minX, height: maxY - minY,
+            zIndex: maxZ + 1, children: ids, isCollapsed: true, originalChildData,
+        };
+        setElements([...newElements, groupEl]);
+        setSelectedElementId(groupId);
+        setSelectedElementIds([groupId]);
+    };
+
+    const handleUngroupSelected = () => {
+        const el = elements.find(e => e.id === selectedElementId);
+        if (!el || el.type !== 'group') return;
+        saveToHistory(elements, markers);
+        const childIds = el.children || [];
+        const originalData = el.originalChildData || {};
+        const newElements = elements
+            .filter(e => e.id !== el.id)
+            .map(e => {
+                if (!childIds.includes(e.id)) return e;
+                const orig = originalData[e.id];
+                return orig
+                    ? { ...e, groupId: undefined, x: orig.x, y: orig.y, width: orig.width, height: orig.height, zIndex: orig.zIndex }
+                    : { ...e, groupId: undefined };
+            });
+        setElements(newElements);
+        setSelectedElementIds(childIds);
+        setSelectedElementId(childIds[0] || null);
+    };
+
     const renderMultiSelectToolbar = () => {
         if (selectedElementIds.length < 2) return null;
         const els = elements.filter(el => selectedElementIds.includes(el.id));
@@ -2889,8 +3341,11 @@ const Workspace: React.FC = () => {
 
         return (
             <div
-                className="absolute bg-white rounded-xl shadow-[0_4px_16px_rgba(0,0,0,0.1)] border border-gray-100 px-2 py-1.5 flex items-center gap-1 z-50 animate-in fade-in zoom-in-95 duration-200 whitespace-nowrap"
-                style={{ left: 0, top: 0, transform: `translate(calc(${centerX}px - 50%), ${topToolbarTop}px)`, willChange: 'transform' }}
+                id="active-floating-toolbar"
+                className={`drag-floating-toolbar absolute bg-white rounded-xl shadow-[0_4px_16px_rgba(0,0,0,0.1)] border border-gray-100 px-2 py-1.5 flex items-center gap-1 z-50 ${isDraggingElement ? '' : 'animate-in fade-in zoom-in-95 duration-200'} whitespace-nowrap`}
+                data-base-left={centerX}
+                data-base-top={topToolbarTop}
+                style={{ left: centerX, top: topToolbarTop, transform: 'translateX(-50%)', willChange: 'transform, left, top' }}
                 onMouseDown={(e) => e.stopPropagation()}
             >
                 {/* Auto Layout */}
@@ -2970,6 +3425,18 @@ const Workspace: React.FC = () => {
                 {/* Download */}
                 <button onClick={handleDownload} className="p-1.5 text-gray-600 hover:text-black hover:bg-gray-50 rounded-lg flex items-center justify-center transition-colors" title="下载">
                     <Download size={14} />
+                </button>
+
+                <div className="w-px h-5 bg-gray-200"></div>
+
+                {/* Group */}
+                <button onClick={handleGroupSelected} className="px-2 py-1.5 text-gray-600 hover:text-black hover:bg-gray-50 rounded-lg flex items-center gap-1.5 text-xs font-medium transition-colors" title="创建编组 Ctrl+G">
+                    <Box size={14} /> 编组
+                </button>
+
+                {/* Merge Layers */}
+                <button onClick={handleMergeSelected} className="px-2 py-1.5 text-gray-600 hover:text-black hover:bg-gray-50 rounded-lg flex items-center gap-1.5 text-xs font-medium transition-colors" title="合并图层 Ctrl+Shift+G">
+                    <Layers size={14} /> 合并
                 </button>
             </div>
         );
@@ -3397,6 +3864,8 @@ const Workspace: React.FC = () => {
                         <div className="p-4 bg-white/50 backdrop-blur-sm z-20">
                             <div
                                 className={`bg-white rounded-[20px] border shadow-lg hover:shadow-xl transition-all duration-300 relative group focus-within:ring-2 focus-within:ring-black/5 focus-within:border-gray-300 flex flex-col ${isDragOver ? 'border-blue-400 ring-2 ring-blue-100 bg-blue-50/30' : 'border-gray-200'}`}
+                                onMouseEnter={() => setIsVideoPanelHovered(true)}
+                                onMouseLeave={() => setIsVideoPanelHovered(false)}
                                 onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(true); }}
                                 onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(false); }}
                                 onDrop={(e) => {
@@ -3424,7 +3893,7 @@ const Workspace: React.FC = () => {
 
                                 {/* Image Mode: Upload Area */}
                                 {creationMode === 'image' && (
-                                    <div className="px-4 pt-4 pb-2">
+                                    <div className={`transition-all duration-300 overflow-hidden px-4 flex flex-col justify-end`} style={{ maxHeight: isVideoPanelHovered ? '80px' : '0px', opacity: isVideoPanelHovered ? 1 : 0, paddingTop: isVideoPanelHovered ? '16px' : '0px', paddingBottom: isVideoPanelHovered ? '8px' : '0px' }}>
                                         <div
                                             onClick={() => fileInputRef.current?.click()}
                                             className="w-14 h-14 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition group/upload"
@@ -3435,23 +3904,74 @@ const Workspace: React.FC = () => {
                                     </div>
                                 )}
 
-                                {/* Video Mode: Frame Upload Area */}
+                                {/* Video Mode: Hover Expandable Frame Upload Area */}
                                 {creationMode === 'video' && (
-                                    <div className="px-4 pt-4 pb-2 flex items-center gap-3">
-                                        <div
-                                            onClick={() => fileInputRef.current?.click()}
-                                            className="w-14 h-14 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition group/upload"
-                                        >
-                                            <Plus size={16} className="text-gray-400 group-hover/upload:text-blue-500 transition" />
-                                            <span className="text-[10px] text-gray-400 group-hover/upload:text-blue-500 mt-0.5">首帧</span>
-                                        </div>
-                                        <div
-                                            onClick={() => fileInputRef.current?.click()}
-                                            className="w-14 h-14 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition group/upload"
-                                        >
-                                            <Plus size={16} className="text-gray-400 group-hover/upload:text-blue-500 transition" />
-                                            <span className="text-[10px] text-gray-400 group-hover/upload:text-blue-500 mt-0.5">尾帧</span>
-                                        </div>
+                                    <div
+                                        className="px-4 transition-all duration-300 overflow-hidden flex flex-col justify-end"
+                                        style={{
+                                            maxHeight: (isVideoPanelHovered || videoStartFrame || videoEndFrame || videoMultiRefs.length > 0) ? '100px' : '0px',
+                                            opacity: (isVideoPanelHovered || videoStartFrame || videoEndFrame || videoMultiRefs.length > 0) ? 1 : 0,
+                                            paddingTop: (isVideoPanelHovered || videoStartFrame || videoEndFrame || videoMultiRefs.length > 0) ? '16px' : '0px',
+                                            paddingBottom: (isVideoPanelHovered || videoStartFrame || videoEndFrame || videoMultiRefs.length > 0) ? '8px' : '0px',
+                                        }}
+                                    >
+                                        {videoGenMode === 'startEnd' ? (
+                                            <div className="flex items-center gap-3">
+                                                <div className="relative">
+                                                    <label className={`w-14 h-14 border rounded-xl flex flex-col items-center justify-center cursor-pointer transition overflow-hidden group/upload ${videoStartFrame ? 'border-gray-200 border-solid shadow-sm' : 'border-2 border-dashed border-gray-300 hover:border-purple-400 hover:bg-purple-50/50'}`}>
+                                                        <input type="file" accept="image/*" className="hidden" onChange={e => { if (e.target.files) setVideoStartFrame(e.target.files[0]); }} />
+                                                        {videoStartFrame ? (
+                                                            <img src={URL.createObjectURL(videoStartFrame)} className="w-full h-full object-cover" />
+                                                        ) : (
+                                                            <>
+                                                                <Plus size={16} className="text-gray-400 group-hover/upload:text-purple-500 transition" />
+                                                                <span className="text-[10px] text-gray-400 group-hover/upload:text-purple-500 mt-0.5">首帧</span>
+                                                            </>
+                                                        )}
+                                                    </label>
+                                                    {videoStartFrame && (
+                                                        <button onClick={(e) => { e.preventDefault(); setVideoStartFrame(null); }} className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-gray-600 hover:bg-gray-800 text-white rounded-full flex items-center justify-center z-10 shadow border border-white">
+                                                            <X size={10} />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                <div className="relative">
+                                                    <label className={`w-14 h-14 border rounded-xl flex flex-col items-center justify-center cursor-pointer transition overflow-hidden group/upload ${videoEndFrame ? 'border-gray-200 border-solid shadow-sm' : 'border-2 border-dashed border-gray-300 hover:border-purple-400 hover:bg-purple-50/50'}`}>
+                                                        <input type="file" accept="image/*" className="hidden" onChange={e => { if (e.target.files) setVideoEndFrame(e.target.files[0]); }} />
+                                                        {videoEndFrame ? (
+                                                            <img src={URL.createObjectURL(videoEndFrame)} className="w-full h-full object-cover" />
+                                                        ) : (
+                                                            <>
+                                                                <Plus size={16} className="text-gray-400 group-hover/upload:text-purple-500 transition" />
+                                                                <span className="text-[10px] text-gray-400 group-hover/upload:text-purple-500 mt-0.5">尾帧</span>
+                                                            </>
+                                                        )}
+                                                    </label>
+                                                    {videoEndFrame && (
+                                                        <button onClick={(e) => { e.preventDefault(); setVideoEndFrame(null); }} className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-gray-600 hover:bg-gray-800 text-white rounded-full flex items-center justify-center z-10 shadow border border-white">
+                                                            <X size={10} />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center gap-2 overflow-x-auto scroller-hidden">
+                                                {videoMultiRefs.map((file, idx) => (
+                                                    <div key={idx} className="relative flex-shrink-0">
+                                                        <div className="w-14 h-14 border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                                                            <img src={URL.createObjectURL(file)} className="w-full h-full object-cover" />
+                                                        </div>
+                                                        <button onClick={() => setVideoMultiRefs(prev => prev.filter((_, i) => i !== idx))} className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-gray-600 hover:bg-gray-800 text-white rounded-full flex items-center justify-center z-10 shadow border border-white">
+                                                            <X size={10} />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                                <label className="w-14 h-14 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center text-gray-400 cursor-pointer hover:border-purple-400 hover:bg-purple-50/50 transition flex-shrink-0 group">
+                                                    <input type="file" accept="image/*" multiple className="hidden" onChange={e => { if (e.target.files) setVideoMultiRefs(prev => [...prev, ...Array.from(e.target.files!)]); }} />
+                                                    <Plus size={16} className="group-hover:text-purple-500 transition" />
+                                                </label>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 
@@ -3799,77 +4319,12 @@ const Workspace: React.FC = () => {
                                                 </div>
                                             )}
                                         </div>
-                                    </div>
 
-                                    {/* Right Side Controls */}
-                                    <div className="flex items-center gap-2">
-                                        {/* Image Mode: Resolution & Aspect Ratio */}
-                                        {creationMode === 'image' && (
-                                            <>
-                                                <div className="relative">
-                                                    <button
-                                                        onClick={() => setShowResPicker(!showResPicker)}
-                                                        className="h-7 px-2.5 rounded-full border border-gray-200 text-xs text-gray-600 hover:bg-gray-50 transition flex items-center gap-1"
-                                                    >
-                                                        {imageGenRes} · {imageGenRatio}
-                                                        <ChevronDown size={12} />
-                                                    </button>
-                                                    {showResPicker && (
-                                                        <div className="absolute bottom-full right-0 mb-2 w-32 bg-white rounded-xl shadow-xl border border-gray-200 py-2 z-50">
-                                                            <div className="px-3 py-1 text-[10px] text-gray-400 uppercase">分辨率</div>
-                                                            {['1K', '2K', '4K'].map(res => (
-                                                                <button key={res} onClick={() => { setImageGenRes(res); }} className={`w-full px-3 py-1.5 text-left text-xs hover:bg-gray-50 ${imageGenRes === res ? 'text-blue-500' : 'text-gray-700'}`}>{res}</button>
-                                                            ))}
-                                                            <div className="border-t border-gray-100 mt-1 pt-1">
-                                                                <div className="px-3 py-1 text-[10px] text-gray-400 uppercase">比例</div>
-                                                                {['1:1', '16:9', '9:16', '4:3', '3:4'].map(ratio => (
-                                                                    <button key={ratio} onClick={() => { setImageGenRatio(ratio); setShowResPicker(false); }} className={`w-full px-3 py-1.5 text-left text-xs hover:bg-gray-50 ${imageGenRatio === ratio ? 'text-blue-500' : 'text-gray-700'}`}>{ratio}</button>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                <div className="flex items-center gap-1 bg-gray-100 rounded-full px-1 py-0.5">
-                                                    <button className="p-1 text-gray-500 hover:text-gray-700 transition"><Box size={14} /></button>
-                                                </div>
-                                                <button
-                                                    onClick={() => handleSend()}
-                                                    disabled={inputBlocks.every(b => (b.type === 'text' && !b.text) || (b.type === 'file' && !b.file))}
-                                                    className="h-8 px-3 rounded-full flex items-center gap-1 text-xs font-medium shadow-sm transition bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 disabled:opacity-50"
-                                                >
-                                                    <Zap size={12} /> 10
-                                                </button>
-                                            </>
-                                        )}
-
-                                        {/* Video Mode: Duration & Aspect Ratio */}
+                                        {/* Video: Setup Panel */}
                                         {creationMode === 'video' && (
                                             <>
-                                                <div className="relative">
-                                                    <button
-                                                        onClick={() => setShowRatioPicker(!showRatioPicker)}
-                                                        className="h-7 px-2.5 rounded-full border border-gray-200 text-xs text-gray-600 hover:bg-gray-50 transition flex items-center gap-1"
-                                                    >
-                                                        首尾帧 · {videoGenRatio} · {videoGenDuration}
-                                                        <ChevronDown size={12} />
-                                                    </button>
-                                                    {showRatioPicker && (
-                                                        <div className="absolute bottom-full right-0 mb-2 w-36 bg-white rounded-xl shadow-xl border border-gray-200 py-2 z-50">
-                                                            <div className="px-3 py-1 text-[10px] text-gray-400 uppercase">时长</div>
-                                                            {['5s', '10s', '15s'].map(dur => (
-                                                                <button key={dur} onClick={() => { setVideoGenDuration(dur); }} className={`w-full px-3 py-1.5 text-left text-xs hover:bg-gray-50 ${videoGenDuration === dur ? 'text-purple-500' : 'text-gray-700'}`}>{dur}</button>
-                                                            ))}
-                                                            <div className="border-t border-gray-100 mt-1 pt-1">
-                                                                <div className="px-3 py-1 text-[10px] text-gray-400 uppercase">比例</div>
-                                                                {['16:9', '9:16', '1:1'].map(ratio => (
-                                                                    <button key={ratio} onClick={() => { setVideoGenRatio(ratio); setShowRatioPicker(false); }} className={`w-full px-3 py-1.5 text-left text-xs hover:bg-gray-50 ${videoGenRatio === ratio ? 'text-purple-500' : 'text-gray-700'}`}>{ratio}</button>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </div>
                                                 <div className="flex items-center gap-1 bg-gray-100 rounded-full px-1 py-0.5">
-                                                    <button className="p-1 text-gray-500 hover:text-gray-700 transition"><RotateCw size={14} /></button>
+                                                    <button className="p-1 text-gray-500 hover:text-gray-700 transition"><Box size={14} /></button>
                                                 </div>
                                                 <button
                                                     onClick={() => handleSend()}
@@ -4042,7 +4497,7 @@ const Workspace: React.FC = () => {
                     </div>
                 </div>
 
-                <div ref={containerRef} className="flex-1 overflow-hidden relative bg-[#E5E7EB] w-full h-full select-none" onContextMenu={handleContextMenu} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp} style={{ cursor: (activeTool === 'hand' || isPanning || isSpacePressed) ? (isPanning ? 'grabbing' : 'grab') : (activeTool === 'mark' ? 'crosshair' : (activeTool === 'select' ? 'default' : 'grab')), WebkitUserSelect: 'none' }}>
+                <div ref={containerRef} className="flex-1 overflow-hidden relative bg-[#E5E7EB] w-full h-full select-none" onContextMenu={handleContextMenu} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }} onDrop={handleCanvasDrop} style={{ cursor: (activeTool === 'hand' || isPanning || isSpacePressed) ? (isPanning ? 'grabbing' : 'grab') : (activeTool === 'mark' ? 'crosshair' : (activeTool === 'select' ? 'default' : 'grab')), WebkitUserSelect: 'none' }}>
                     {renderToolbar()}
                     {/* 框选矩形 */}
                     {isMarqueeSelecting && (
@@ -4060,7 +4515,41 @@ const Workspace: React.FC = () => {
                     {renderMultiSelectToolbar()}
                     <div ref={canvasLayerRef} className="absolute top-0 left-0 w-0 h-0 overflow-visible" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom / 100})`, transformOrigin: '0 0', willChange: 'transform' }}>
                         {elements.map((el) => {
+                            // Hide children of collapsed (merged) groups
+                            if (el.groupId) {
+                                const parentGroup = elements.find(e => e.id === el.groupId);
+                                if (parentGroup?.isCollapsed) return null;
+                            }
                             const isSelected = selectedElementId === el.id || selectedElementIds.includes(el.id);
+
+                            // Group element rendering
+                            if (el.type === 'group') {
+                                return (
+                                    <div key={el.id} id={`canvas-el-${el.id}`} className={`absolute ${isSelected ? 'ring-2 ring-blue-500' : ''}`} style={{ left: el.x, top: el.y, width: el.width, height: el.height, zIndex: el.zIndex, cursor: activeTool === 'select' ? 'move' : 'default' }} onMouseDown={(e) => handleElementMouseDown(e, el.id)}>
+                                        {el.isCollapsed ? (
+                                            <div className="w-full h-full bg-gray-50/80 border-2 border-gray-300 rounded-lg flex items-center justify-center backdrop-blur-sm">
+                                                <div className="flex items-center gap-2 text-gray-500 text-xs font-medium">
+                                                    <Layers size={16} />
+                                                    <span>已合并 · {el.children?.length || 0} 个图层</span>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="w-full h-full border-2 border-dashed border-blue-300 rounded-lg pointer-events-none" />
+                                        )}
+                                        {isSelected && (
+                                            <div className="absolute -top-8 right-0 flex items-center gap-1 z-50">
+                                                <button className="bg-white shadow-md rounded-md p-1 cursor-pointer hover:bg-blue-50 hover:text-blue-600 text-gray-500 text-xs flex items-center gap-1 px-2" onClick={(e) => { e.stopPropagation(); handleUngroupSelected(); }}>
+                                                    <Unlink size={12} /> 拆分
+                                                </button>
+                                                <div className="bg-white shadow-md rounded-md p-1 cursor-pointer hover:bg-red-50 hover:text-red-500">
+                                                    <Trash2 size={14} onClick={(e) => { e.stopPropagation(); deleteSelectedElement(); }} />
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            }
+
                             return (
                                 <div key={el.id} id={`canvas-el-${el.id}`} className={`absolute group ${isSelected && el.type !== 'text' ? 'ring-2 ring-blue-500' : ''} ${isSelected && el.type === 'text' ? 'ring-1 ring-blue-500 ring-offset-2' : ''}`} style={{ left: el.x, top: el.y, width: el.type === 'text' ? 'auto' : el.width, height: el.type === 'text' ? 'auto' : el.height, zIndex: el.zIndex, cursor: activeTool === 'select' ? 'move' : (activeTool === 'mark' ? 'crosshair' : 'default'), whiteSpace: el.type === 'text' ? 'nowrap' : 'normal' }} onMouseDown={(e) => handleElementMouseDown(e, el.id)} onDoubleClick={() => { if (el.type === 'text') { setEditingTextId(el.id); } else if (el.url) { setPreviewUrl(el.url); } }}>
                                     {(isSelected || isDraggingElement) && editingTextId !== el.id && (<div className="absolute -top-8 right-0 bg-white shadow-md rounded-md p-1 cursor-pointer hover:bg-red-50 hover:text-red-500 z-50"><Trash2 size={14} onClick={(e) => { e.stopPropagation(); deleteSelectedElement(); }} /></div>)}
@@ -4206,9 +4695,9 @@ const Workspace: React.FC = () => {
                         {/* Alignment Guide Lines */}
                         {alignGuides.map((guide, i) => (
                             guide.type === 'v' ? (
-                                <div key={`guide-${i}`} className="absolute pointer-events-none z-[9998]" style={{ left: guide.pos, top: -5000, width: 0, height: 10000, borderLeft: '1px dashed #f43f5e' }} />
+                                <div key={`guide-${i}`} className="absolute pointer-events-none z-[9998]" style={{ left: guide.pos, top: -5000, width: 1, height: 10000, background: 'repeating-linear-gradient(to bottom, #f43f5e 0px, #f43f5e 4px, transparent 4px, transparent 8px)' }} />
                             ) : (
-                                <div key={`guide-${i}`} className="absolute pointer-events-none z-[9998]" style={{ left: -5000, top: guide.pos, width: 10000, height: 0, borderTop: '1px dashed #f43f5e' }} />
+                                <div key={`guide-${i}`} className="absolute pointer-events-none z-[9998]" style={{ left: -5000, top: guide.pos, width: 10000, height: 1, background: 'repeating-linear-gradient(to right, #f43f5e 0px, #f43f5e 4px, transparent 4px, transparent 8px)' }} />
                             )
                         ))}
                         {/* Markers Layer */}
