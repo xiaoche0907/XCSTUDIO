@@ -52,7 +52,12 @@ Always return your response as JSON.`;
         for (const file of attachments) {
           try {
             const buffer = await file.arrayBuffer();
-            const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+            const bytes = new Uint8Array(buffer);
+            let binary = '';
+            for (let i = 0; i < bytes.length; i++) {
+              binary += String.fromCharCode(bytes[i]);
+            }
+            const base64 = btoa(binary);
             parts.push({
               inlineData: {
                 mimeType: file.type || 'image/png',
@@ -115,27 +120,36 @@ Always return your response as JSON.`;
       if (parsed.proposals && Array.isArray(parsed.proposals)) {
         console.log('[Agent] Found proposals:', parsed.proposals.length);
 
-        // Auto-execute image generation for proposals that have prompts
+        // Auto-execute image generation for proposals that have prompts (concurrent with limit)
+        const proposalsWithPrompts = parsed.proposals.filter((p: any) => p.prompt);
+        const CONCURRENCY_LIMIT = 3;
         const generatedAssets: GeneratedAsset[] = [];
-        for (const proposal of parsed.proposals) {
-          if (proposal.prompt) {
-            try {
+
+        for (let i = 0; i < proposalsWithPrompts.length; i += CONCURRENCY_LIMIT) {
+          const batch = proposalsWithPrompts.slice(i, i + CONCURRENCY_LIMIT);
+          const results = await Promise.allSettled(
+            batch.map(async (proposal: any) => {
               const url = await executeSkill('generateImage', {
                 prompt: proposal.prompt,
                 model: proposal.model || 'Nano Banana',
                 aspectRatio: proposal.aspectRatio || '1:1'
               });
-              if (url) {
-                generatedAssets.push({
-                  id: `asset-${Date.now()}-${Math.random()}`,
-                  type: 'image',
-                  url,
-                  metadata: { prompt: proposal.prompt, model: proposal.model || 'Nano Banana', agentId: this.agentInfo.id }
-                });
-                proposal.generatedUrl = url;
-              }
-            } catch (e) {
-              console.warn('[Agent] Skill execution failed for proposal:', proposal.title, e);
+              return { proposal, url };
+            })
+          );
+
+          for (const result of results) {
+            if (result.status === 'fulfilled' && result.value.url) {
+              const { proposal, url } = result.value;
+              generatedAssets.push({
+                id: crypto.randomUUID(),
+                type: 'image',
+                url,
+                metadata: { prompt: proposal.prompt, model: proposal.model || 'Nano Banana', agentId: this.agentInfo.id }
+              });
+              proposal.generatedUrl = url;
+            } else if (result.status === 'rejected') {
+              console.warn('[Agent] Skill execution failed:', result.reason);
             }
           }
         }
@@ -250,7 +264,7 @@ Always return your response as JSON.`;
     return skillCalls
       .filter(s => s.result && (s.skillName === 'generateImage' || s.skillName === 'generateVideo'))
       .map(s => ({
-        id: `asset-${Date.now()}-${Math.random()}`,
+        id: crypto.randomUUID(),
         type: s.skillName === 'generateImage' ? 'image' as const : 'video' as const,
         url: s.result,
         metadata: {

@@ -6,7 +6,6 @@ import { ChatMessage, InputBlock } from '../types';
 interface AgentState {
   // 智能体模式
   isAgentMode: boolean;
-  agentMode: boolean; // 兼容旧代码
   
   // 当前任务
   currentTask: AgentTask | null;
@@ -96,7 +95,6 @@ interface AgentState {
 
 const initialState = {
   isAgentMode: false,
-  agentMode: false,
   
   currentTask: null,
   
@@ -135,8 +133,8 @@ export const useAgentStore = create<AgentState>()(
     ...initialState,
     
     actions: {
-      setIsAgentMode: (mode) => set({ isAgentMode: mode, agentMode: mode }),
-      setAgentMode: (mode) => set({ agentMode: mode, isAgentMode: mode }),
+      setIsAgentMode: (mode) => set({ isAgentMode: mode }),
+      setAgentMode: (mode) => set({ isAgentMode: mode }),
       
       setCurrentTask: (task) => set({ currentTask: task }),
       

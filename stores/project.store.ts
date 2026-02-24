@@ -154,7 +154,8 @@ export const useProjectStore = create<ProjectState>()(
         }),
         
         loadProject: (projectData) => set((state) => {
-          Object.assign(state, projectData);
+          const { actions: _actions, ...safeData } = projectData as any;
+          Object.assign(state, safeData);
           state.updatedAt = Date.now();
         })
       }

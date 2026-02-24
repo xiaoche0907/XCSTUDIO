@@ -81,6 +81,35 @@ const initialState = {
   resizeHandle: null,
 };
 
+/** Shared logic for groupElements and mergeElements */
+function createGroupInState(state: any, ids: string[], collapsed: boolean): string {
+  const targets = state.elements.filter((el: any) => ids.includes(el.id));
+  if (targets.length < 2) return '';
+  const minX = Math.min(...targets.map((el: any) => el.x));
+  const minY = Math.min(...targets.map((el: any) => el.y));
+  const maxX = Math.max(...targets.map((el: any) => el.x + el.width));
+  const maxY = Math.max(...targets.map((el: any) => el.y + el.height));
+  const maxZ = Math.max(...targets.map((el: any) => el.zIndex));
+  const newGroupId = `group-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const originalChildData: Record<string, { x: number; y: number; width: number; height: number; zIndex: number }> = {};
+  for (const t of targets) {
+    originalChildData[t.id] = { x: t.x, y: t.y, width: t.width, height: t.height, zIndex: t.zIndex };
+    const el = state.elements.find((e: any) => e.id === t.id);
+    if (el) el.groupId = newGroupId;
+  }
+  state.elements.push({
+    id: newGroupId,
+    type: 'group',
+    x: minX, y: minY,
+    width: maxX - minX, height: maxY - minY,
+    zIndex: maxZ + 1,
+    children: ids,
+    isCollapsed: collapsed,
+    originalChildData,
+  });
+  return newGroupId;
+}
+
 export const useCanvasStore = create<CanvasState>()(
   immer((set, get) => ({
     ...initialState,
@@ -145,11 +174,16 @@ export const useCanvasStore = create<CanvasState>()(
       setMarkers: (markers) => set({ markers }),
       
       saveToHistory: () => set((state) => {
+        const MAX_HISTORY = 50;
         const newHistory = state.history.slice(0, state.historyStep + 1);
-        newHistory.push({ 
-          elements: JSON.parse(JSON.stringify(state.elements)),
-          markers: JSON.parse(JSON.stringify(state.markers))
+        newHistory.push({
+          elements: structuredClone(state.elements),
+          markers: structuredClone(state.markers)
         });
+        // 超出上限时丢弃最早的记录
+        if (newHistory.length > MAX_HISTORY) {
+          newHistory.splice(0, newHistory.length - MAX_HISTORY);
+        }
         state.history = newHistory;
         state.historyStep = newHistory.length - 1;
       }),
@@ -175,30 +209,7 @@ export const useCanvasStore = create<CanvasState>()(
       groupElements: (ids) => {
         let newGroupId = '';
         set((state) => {
-          const targets = state.elements.filter(el => ids.includes(el.id));
-          if (targets.length < 2) return;
-          const minX = Math.min(...targets.map(el => el.x));
-          const minY = Math.min(...targets.map(el => el.y));
-          const maxX = Math.max(...targets.map(el => el.x + el.width));
-          const maxY = Math.max(...targets.map(el => el.y + el.height));
-          const maxZ = Math.max(...targets.map(el => el.zIndex));
-          newGroupId = `group-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-          const originalChildData: Record<string, { x: number; y: number; width: number; height: number; zIndex: number }> = {};
-          for (const t of targets) {
-            originalChildData[t.id] = { x: t.x, y: t.y, width: t.width, height: t.height, zIndex: t.zIndex };
-            const el = state.elements.find(e => e.id === t.id);
-            if (el) el.groupId = newGroupId;
-          }
-          state.elements.push({
-            id: newGroupId,
-            type: 'group',
-            x: minX, y: minY,
-            width: maxX - minX, height: maxY - minY,
-            zIndex: maxZ + 1,
-            children: ids,
-            isCollapsed: false,
-            originalChildData,
-          });
+          newGroupId = createGroupInState(state, ids, false);
         });
         return newGroupId;
       },
@@ -206,30 +217,7 @@ export const useCanvasStore = create<CanvasState>()(
       mergeElements: (ids) => {
         let newGroupId = '';
         set((state) => {
-          const targets = state.elements.filter(el => ids.includes(el.id));
-          if (targets.length < 2) return;
-          const minX = Math.min(...targets.map(el => el.x));
-          const minY = Math.min(...targets.map(el => el.y));
-          const maxX = Math.max(...targets.map(el => el.x + el.width));
-          const maxY = Math.max(...targets.map(el => el.y + el.height));
-          const maxZ = Math.max(...targets.map(el => el.zIndex));
-          newGroupId = `group-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-          const originalChildData: Record<string, { x: number; y: number; width: number; height: number; zIndex: number }> = {};
-          for (const t of targets) {
-            originalChildData[t.id] = { x: t.x, y: t.y, width: t.width, height: t.height, zIndex: t.zIndex };
-            const el = state.elements.find(e => e.id === t.id);
-            if (el) el.groupId = newGroupId;
-          }
-          state.elements.push({
-            id: newGroupId,
-            type: 'group',
-            x: minX, y: minY,
-            width: maxX - minX, height: maxY - minY,
-            zIndex: maxZ + 1,
-            children: ids,
-            isCollapsed: true,
-            originalChildData,
-          });
+          newGroupId = createGroupInState(state, ids, true);
         });
         return newGroupId;
       },

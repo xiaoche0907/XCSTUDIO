@@ -123,24 +123,28 @@ Analyze and route to appropriate agent. Return JSON with:
         const result = await errorHandler.withRetry(
             async () => {
                 const ai = getClient();
-                const response = await Promise.race([
-                    ai.models.generateContent({
+                const abortController = new AbortController();
+                const timeoutId = setTimeout(() => abortController.abort(), finalConfig.timeout);
+
+                try {
+                    const response = await ai.models.generateContent({
                         model: 'gemini-3-flash-preview',
                         contents: { parts: [{ text: prompt }] },
                         config: {
                             temperature: 0.2,
-                            responseMimeType: 'application/json'
+                            responseMimeType: 'application/json',
+                            abortSignal: abortController.signal
                         }
-                    }),
-                    new Promise((_, reject) =>
-                        setTimeout(
-                            () => reject(new Error('Request timeout')),
-                            finalConfig.timeout
-                        )
-                    )
-                ]);
-
-                return response;
+                    });
+                    return response;
+                } catch (error) {
+                    if (abortController.signal.aborted) {
+                        throw new Error('Request timeout');
+                    }
+                    throw error;
+                } finally {
+                    clearTimeout(timeoutId);
+                }
             },
             {
                 maxRetries: 1,
@@ -152,8 +156,11 @@ Analyze and route to appropriate agent. Return JSON with:
 
         console.log('[EnhancedOrchestrator] Response received');
 
-        // 解析响应
-        const parsed = JSON.parse((result as any).text || '{}');
+        // 解析响应 — 安全提取 text 字段
+        const responseText = result && typeof result === 'object' && 'text' in result
+            ? String((result as any).text)
+            : '';
+        const parsed = JSON.parse(responseText || '{}');
 
         // 验证路由决策
         if (parsed.action !== 'route' || !parsed.targetAgent) {

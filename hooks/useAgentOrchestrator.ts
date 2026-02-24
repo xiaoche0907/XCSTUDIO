@@ -1,19 +1,13 @@
 import { useState, useCallback, useRef } from 'react';
-import { AgentType, AgentTask, ProjectContext, GeneratedAsset } from '../types/agent.types';
-import { routeToAgent, executeAgentTask, getAgentInfo } from '../services/agents';
+import { AgentTask, ProjectContext } from '../types/agent.types';
+import { routeToAgent, executeAgentTask } from '../services/agents';
 import { ChatMessage } from '../types';
-
-interface AgentMessage extends ChatMessage {
-  agentId?: AgentType;
-  taskId?: string;
-  assets?: GeneratedAsset[];
-}
 
 export function useAgentOrchestrator(projectContext: ProjectContext) {
   const [currentTask, setCurrentTask] = useState<AgentTask | null>(null);
   const [isAgentMode, setIsAgentMode] = useState(false);
-  const [messages, setMessages] = useState<AgentMessage[]>([]);
   const conversationHistory = useRef<ChatMessage[]>([]);
+  const MAX_HISTORY = 50;
 
   const processMessage = useCallback(async (
     message: string,
@@ -88,6 +82,11 @@ export function useAgentOrchestrator(projectContext: ProjectContext) {
         });
       }
 
+      // Sliding window: keep only the most recent messages
+      if (conversationHistory.current.length > MAX_HISTORY) {
+        conversationHistory.current = conversationHistory.current.slice(-MAX_HISTORY);
+      }
+
       return result;
     } catch (error) {
       console.error('[useAgentOrchestrator] Error:', error);
@@ -106,7 +105,6 @@ export function useAgentOrchestrator(projectContext: ProjectContext) {
     isAgentMode,
     setIsAgentMode,
     processMessage,
-    resetAgent,
-    messages
+    resetAgent
   };
 }
