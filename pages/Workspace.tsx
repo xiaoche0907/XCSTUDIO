@@ -1985,14 +1985,7 @@ const Workspace: React.FC = () => {
                         dom.style.top = `${pos.y}px`;
                     }
                 }
-                const toolbarWrappers = document.querySelectorAll('.drag-floating-toolbar');
-                toolbarWrappers.forEach(toolbarWrapper => {
-                    const tw = toolbarWrapper as HTMLElement;
-                    const baseLeft = parseFloat(tw.getAttribute('data-base-left') || '0');
-                    const baseTop = parseFloat(tw.getAttribute('data-base-top') || '0');
-                    tw.style.left = `${baseLeft + totalDx * (zoom / 100)}px`;
-                    tw.style.top = `${baseTop + totalDy * (zoom / 100)}px`;
-                });
+                // Toolbar position is handled by React re-renders using dragOffsetsRef
             });
         }
     };
@@ -2624,17 +2617,19 @@ const Workspace: React.FC = () => {
         const el = elements.find(e => e.id === selectedElementId);
         if (!el || (el.type !== 'gen-image' && el.type !== 'image')) return null;
 
-        const screenX = el.x * (zoom / 100) + pan.x;
-        const screenY = el.y * (zoom / 100) + pan.y;
-        const screenWidth = el.width * (zoom / 100);
-        const screenHeight = el.height * (zoom / 100);
-        const centerX = screenX + (screenWidth / 2);
+        // Canvas-space coordinates (toolbar lives inside the CSS transform layer)
+        // During drag, use ref position to stay in sync with direct DOM updates
+        const dragPos = isDraggingElement ? dragOffsetsRef.current[el.id] : null;
+        const elX = dragPos ? dragPos.x : el.x;
+        const elY = dragPos ? dragPos.y : el.y;
+        const canvasCenterX = elX + el.width / 2;
+        const counterScale = 100 / zoom;
 
         // Configuration Toolbar for Empty Gen-Image
         if (!el.url && el.type === 'gen-image') {
-            const toolbarTop = screenY + screenHeight + 16;
+            const toolbarTop = elY + el.height + (16 * counterScale);
             return (
-                <div id="active-floating-toolbar" className="drag-floating-toolbar absolute bg-white rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.08)] border border-gray-100 p-4 z-50 animate-in fade-in zoom-in-95 duration-200 w-[440px]" data-base-left={centerX} data-base-top={toolbarTop} style={{ left: centerX, top: toolbarTop, transform: 'translateX(-50%)', willChange: 'transform, left, top' }} onMouseDown={(e) => e.stopPropagation()}>
+                <div id="active-floating-toolbar" className="absolute bg-white rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.08)] border border-gray-100 p-4 z-50 animate-in fade-in zoom-in-95 duration-200 w-[440px]" style={{ left: canvasCenterX, top: toolbarTop, transform: `translateX(-50%) scale(${counterScale})`, transformOrigin: 'top center', pointerEvents: 'auto' }} onMouseDown={(e) => e.stopPropagation()}>
                     <textarea
                         placeholder="今天我们要创作什么..."
                         className="w-full text-sm font-medium text-gray-700 placeholder:text-gray-300 bg-transparent border-none outline-none resize-none h-20 mb-4 p-1 leading-relaxed"
@@ -2729,17 +2724,17 @@ const Workspace: React.FC = () => {
         // Only show if it has a URL (actual image)
         // if (!el.url && el.type === 'gen-image') return null; // This line is replaced by the above block
 
-        const topToolbarTop = screenY - 86;
-        const bottomButtonTop = screenY + screenHeight + 16;
+        const topToolbarTop = elY - (86 * counterScale);
+        const bottomButtonTop = elY + el.height + (16 * counterScale);
 
         // Text Edit Modal logic
         if (showTextEditModal) {
-            const modalLeft = screenX + screenWidth + 20;
-            const modalTop = screenY;
+            const modalLeft = elX + el.width + (20 * counterScale);
+            const modalTop = elY;
             return (
                 <div
                     className="absolute bg-white rounded-xl shadow-xl border border-gray-200 p-4 z-[60] w-64 animate-in fade-in slide-in-from-left-2 duration-200 flex flex-col gap-2"
-                    style={{ left: modalLeft, top: modalTop }}
+                    style={{ left: modalLeft, top: modalTop, transform: `scale(${counterScale})`, transformOrigin: 'top left', pointerEvents: 'auto' }}
                     onMouseDown={(e) => e.stopPropagation()}
                 >
                     <div className="flex justify-between items-center mb-2">
@@ -2782,14 +2777,14 @@ const Workspace: React.FC = () => {
             return (
                 <>
                     {/* Top Hint */}
-                    <div className="absolute -translate-x-1/2 bg-white px-4 py-2 rounded-full shadow-lg border border-gray-100 flex items-center gap-2 text-sm text-gray-600 z-50 whitespace-nowrap animate-in slide-in-from-bottom-2 fade-in" style={{ left: centerX, top: topToolbarTop - 50 }}>
+                    <div className="absolute bg-white px-4 py-2 rounded-full shadow-lg border border-gray-100 flex items-center gap-2 text-sm text-gray-600 z-50 whitespace-nowrap animate-in slide-in-from-bottom-2 fade-in" style={{ left: canvasCenterX, top: topToolbarTop - (50 * counterScale), transform: `translateX(-50%) scale(${counterScale})`, transformOrigin: 'bottom center', pointerEvents: 'auto' }}>
                         <span>在图片上绘制选区，</span>
                         <kbd className="bg-gray-100 px-1.5 py-0.5 rounded text-xs border border-gray-200 font-sans">Alt</kbd> <span>擦除，</span>
                         <kbd className="bg-gray-100 px-1.5 py-0.5 rounded text-xs border border-gray-200 font-sans">Esc</kbd> <span>退出</span>
                     </div>
 
                     {/* Eraser Toolbar */}
-                    <div className="absolute -translate-x-1/2 bg-white rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-gray-100 p-2 flex items-center gap-3 z-50 animate-in zoom-in-95 fade-in duration-200" style={{ left: centerX, top: topToolbarTop }}>
+                    <div className="absolute bg-white rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-gray-100 p-2 flex items-center gap-3 z-50 animate-in zoom-in-95 fade-in duration-200" style={{ left: canvasCenterX, top: topToolbarTop, transform: `translateX(-50%) scale(${counterScale})`, transformOrigin: 'bottom center', pointerEvents: 'auto' }}>
                         <div className="flex items-center gap-2 px-2 border-r border-gray-100">
                             <Eraser size={18} className="text-blue-500 fill-blue-500/20" />
                             <span className="text-sm font-medium text-gray-900">擦除</span>
@@ -2836,7 +2831,7 @@ const Workspace: React.FC = () => {
 
         return (
             <>
-                <div id="active-floating-toolbar" className={`drag-floating-toolbar absolute bg-white rounded-xl shadow-[0_4px_12px_rgba(0,0,0,0.08)] border border-gray-100 px-2 py-1.5 flex items-center gap-1 z-50 ${isDraggingElement ? '' : 'animate-in fade-in zoom-in-95 duration-200'} whitespace-nowrap`} data-base-left={centerX} data-base-top={topToolbarTop} style={{ left: centerX, top: topToolbarTop, transform: 'translateX(-50%)', willChange: 'transform, left, top' }} onMouseDown={(e) => e.stopPropagation()}>
+                <div id="active-floating-toolbar" className={`absolute bg-white rounded-xl shadow-[0_4px_12px_rgba(0,0,0,0.08)] border border-gray-100 px-2 py-1.5 flex items-center gap-1 z-50 ${isDraggingElement ? '' : 'animate-in fade-in zoom-in-95 duration-200'} whitespace-nowrap`} style={{ left: canvasCenterX, top: topToolbarTop, transform: `translateX(-50%) scale(${counterScale})`, transformOrigin: 'bottom center', pointerEvents: 'auto' }} onMouseDown={(e) => e.stopPropagation()}>
 
                     {/* Upscale */}
                     <div className="relative">
@@ -2901,7 +2896,7 @@ const Workspace: React.FC = () => {
                 </div>
 
                 {showFastEdit ? (
-                    <div id="active-floating-toolbar-fast-edit" className="drag-floating-toolbar absolute bg-white rounded-xl shadow-lg border border-gray-200 p-2 z-50 animate-in fade-in zoom-in-95 duration-200 w-64" data-base-left={centerX} data-base-top={bottomButtonTop} style={{ left: centerX, top: bottomButtonTop, transform: 'translateX(-50%)', willChange: 'transform, left, top' }} onMouseDown={(e) => e.stopPropagation()}>
+                    <div id="active-floating-toolbar-fast-edit" className="absolute bg-white rounded-xl shadow-lg border border-gray-200 p-2 z-50 animate-in fade-in zoom-in-95 duration-200 w-64" style={{ left: canvasCenterX, top: bottomButtonTop, transform: `translateX(-50%) scale(${counterScale})`, transformOrigin: 'top center', pointerEvents: 'auto' }} onMouseDown={(e) => e.stopPropagation()}>
                         <textarea autoFocus className="w-full text-sm text-gray-700 placeholder:text-gray-300 bg-transparent border-none outline-none resize-none h-16 mb-1 p-1" placeholder="Describe your edit here" value={fastEditPrompt} onChange={(e) => setFastEditPrompt(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleFastEditRun(); } e.stopPropagation(); }} />
                         <div className="flex justify-end">
                             <button onClick={handleFastEditRun} disabled={!fastEditPrompt || el.isGenerating} className="bg-gray-500 hover:bg-black text-white text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition disabled:opacity-50">
@@ -2911,7 +2906,7 @@ const Workspace: React.FC = () => {
                         </div>
                     </div>
                 ) : (
-                    <div id="active-floating-toolbar-fast-edit" onClick={() => setShowFastEdit(true)} className="drag-floating-toolbar absolute bg-white rounded-xl shadow-sm border border-gray-200 px-4 py-2 z-50 animate-in fade-in duration-300 flex items-center gap-2 cursor-pointer hover:shadow-md transition group" data-base-left={centerX} data-base-top={bottomButtonTop} style={{ left: centerX, top: bottomButtonTop, transform: 'translateX(-50%)', willChange: 'transform, left, top' }} onMouseDown={(e) => e.stopPropagation()}>
+                    <div id="active-floating-toolbar-fast-edit" onClick={() => setShowFastEdit(true)} className="absolute bg-white rounded-xl shadow-sm border border-gray-200 px-4 py-2 z-50 animate-in fade-in duration-300 flex items-center gap-2 cursor-pointer hover:shadow-md transition group whitespace-nowrap" style={{ left: canvasCenterX, top: bottomButtonTop, transform: `translateX(-50%) scale(${counterScale})`, transformOrigin: 'top center', pointerEvents: 'auto' }} onMouseDown={(e) => e.stopPropagation()}>
                         <span className="text-sm text-gray-700 font-medium group-hover:text-black">快捷编辑</span>
                         <span className="text-xs text-gray-400 border border-gray-200 rounded px-1.5 py-0.5 ml-1">Tab</span>
                     </div>
@@ -2924,17 +2919,20 @@ const Workspace: React.FC = () => {
         if (!selectedElementId || selectedElementIds.length > 1) return null;
         const el = elements.find(e => e.id === selectedElementId);
         if (!el || (el.type !== 'gen-video' && el.type !== 'video')) return null;
-        const screenX = el.x * (zoom / 100) + pan.x;
-        const screenY = el.y * (zoom / 100) + pan.y;
-        const screenWidth = el.width * (zoom / 100);
-        const screenHeight = el.height * (zoom / 100);
+
+        // Canvas-space coordinates (toolbar lives inside the CSS transform layer)
+        // During drag, use ref position to stay in sync with direct DOM updates
+        const dragPos = isDraggingElement ? dragOffsetsRef.current[el.id] : null;
+        const elX = dragPos ? dragPos.x : el.x;
+        const elY = dragPos ? dragPos.y : el.y;
+        const canvasCenterX = elX + el.width / 2;
+        const counterScale = 100 / zoom;
 
         if (el.url) {
             // Generated state
-            const topToolbarTop = screenY - 60;
-            const centerX = screenX + (screenWidth / 2);
+            const topToolbarTop = elY - (60 * counterScale);
             return (
-                <div id="active-floating-toolbar" className={`drag-floating-toolbar absolute bg-white rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-gray-100/50 px-2 py-1.5 flex items-center gap-1 z-50 ${isDraggingElement ? '' : 'animate-in fade-in zoom-in-95 duration-200'} whitespace-nowrap backdrop-blur-sm`} data-base-left={centerX} data-base-top={topToolbarTop} style={{ left: centerX, top: topToolbarTop, transform: 'translateX(-50%)', willChange: 'transform, left, top' }} onMouseDown={(e) => e.stopPropagation()}>
+                <div id="active-floating-toolbar" className={`absolute bg-white rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-gray-100/50 px-2 py-1.5 flex items-center gap-1 z-50 ${isDraggingElement ? '' : 'animate-in fade-in zoom-in-95 duration-200'} whitespace-nowrap backdrop-blur-sm`} style={{ left: canvasCenterX, top: topToolbarTop, transform: `translateX(-50%) scale(${counterScale})`, transformOrigin: 'bottom center', pointerEvents: 'auto' }} onMouseDown={(e) => e.stopPropagation()}>
                     <button className="px-2.5 py-1.5 text-gray-600 hover:text-black hover:bg-gray-50 rounded-lg flex items-center gap-2 text-xs font-medium transition-colors group">
                         <div className="border-[1.5px] border-current rounded-[3px] px-0.5 text-[8px] font-bold opacity-70 group-hover:opacity-100 transition-opacity">HD</div>
                         放大
@@ -2951,10 +2949,9 @@ const Workspace: React.FC = () => {
             );
         } else {
             // Config state
-            const toolbarTop = screenY + screenHeight + 16;
-            const centerX = screenX + (screenWidth / 2);
+            const toolbarTop = elY + el.height + (16 * counterScale);
             return (
-                <div id="active-floating-toolbar" className="drag-floating-toolbar absolute bg-white rounded-2xl shadow-[0_4px_20px_rgb(0,0,0,0.08)] border border-gray-100 z-50 animate-in fade-in zoom-in-95 duration-200 min-w-[420px]" data-base-left={centerX} data-base-top={toolbarTop} style={{ left: centerX, top: toolbarTop, transform: 'translateX(-50%)', willChange: 'transform, left, top' }} onMouseDown={(e) => e.stopPropagation()}>
+                <div id="active-floating-toolbar" className="absolute bg-white rounded-2xl shadow-[0_4px_20px_rgb(0,0,0,0.08)] border border-gray-100 z-50 animate-in fade-in zoom-in-95 duration-200 min-w-[420px]" style={{ left: canvasCenterX, top: toolbarTop, transform: `translateX(-50%) scale(${counterScale})`, transformOrigin: 'top center', pointerEvents: 'auto' }} onMouseDown={(e) => e.stopPropagation()}>
                     {/* Prompt textarea */}
                     <div className="p-3 pb-0">
                         <textarea placeholder="今天我们要创作什么" className="w-full text-sm text-gray-700 placeholder:text-gray-400 bg-transparent border-none outline-none resize-none h-16 p-1" value={el.genPrompt || ''} onChange={(e) => updateSelectedElement({ genPrompt: e.target.value })} onKeyDown={(e) => e.stopPropagation()} />
@@ -3348,22 +3345,25 @@ const Workspace: React.FC = () => {
         if (selectedElementIds.length < 2) return null;
         const els = elements.filter(el => selectedElementIds.includes(el.id));
         if (els.length === 0) return null;
-        const minX = Math.min(...els.map(el => el.x));
-        const minY = Math.min(...els.map(el => el.y));
-        const maxX = Math.max(...els.map(el => el.x + el.width));
-        const screenX = minX * (zoom / 100) + pan.x;
-        const screenY = minY * (zoom / 100) + pan.y;
-        const screenMaxX = maxX * (zoom / 100) + pan.x;
-        const centerX = (screenX + screenMaxX) / 2;
-        const topToolbarTop = screenY - 52;
+        // During drag, use ref positions to stay in sync
+        const getPos = (el: CanvasElement) => {
+            const dragPos = isDraggingElement ? dragOffsetsRef.current[el.id] : null;
+            return { x: dragPos ? dragPos.x : el.x, y: dragPos ? dragPos.y : el.y };
+        };
+        const minX = Math.min(...els.map(el => getPos(el).x));
+        const minY = Math.min(...els.map(el => getPos(el).y));
+        const maxX = Math.max(...els.map(el => getPos(el).x + el.width));
+
+        // Canvas-space coordinates (toolbar lives inside the CSS transform layer)
+        const canvasCenterX = (minX + maxX) / 2;
+        const counterScale = 100 / zoom;
+        const topToolbarTop = minY - (52 * counterScale);
 
         return (
             <div
                 id="active-floating-toolbar"
-                className={`drag-floating-toolbar absolute bg-white rounded-xl shadow-[0_4px_16px_rgba(0,0,0,0.1)] border border-gray-100 px-2 py-1.5 flex items-center gap-1 z-50 ${isDraggingElement ? '' : 'animate-in fade-in zoom-in-95 duration-200'} whitespace-nowrap`}
-                data-base-left={centerX}
-                data-base-top={topToolbarTop}
-                style={{ left: centerX, top: topToolbarTop, transform: 'translateX(-50%)', willChange: 'transform, left, top' }}
+                className={`absolute bg-white rounded-xl shadow-[0_4px_16px_rgba(0,0,0,0.1)] border border-gray-100 px-2 py-1.5 flex items-center gap-1 z-50 ${isDraggingElement ? '' : 'animate-in fade-in zoom-in-95 duration-200'} whitespace-nowrap`}
+                style={{ left: canvasCenterX, top: topToolbarTop, transform: `translateX(-50%) scale(${counterScale})`, transformOrigin: 'bottom center', pointerEvents: 'auto' }}
                 onMouseDown={(e) => e.stopPropagation()}
             >
                 {/* Auto Layout */}
@@ -4528,9 +4528,6 @@ const Workspace: React.FC = () => {
                     )}
                     {renderTextToolbar()}
                     {renderShapeToolbar()}
-                    {renderImageToolbar()}
-                    {renderGenVideoToolbar()}
-                    {renderMultiSelectToolbar()}
                     <div ref={canvasLayerRef} className="absolute top-0 left-0 w-0 h-0 overflow-visible" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom / 100})`, transformOrigin: '0 0', willChange: 'transform' }}>
                         {elements.map((el) => {
                             // Hide children of collapsed (merged) groups
@@ -4722,11 +4719,16 @@ const Workspace: React.FC = () => {
                         {markers.map((marker) => {
                             const el = elements.find(e => e.id === marker.elementId);
                             if (!el) return null;
-                            const pixelX = el.x + (el.width * marker.x / 100);
-                            const pixelY = el.y + (el.height * marker.y / 100);
+                            // During drag, use ref positions to stay in sync
+                            const dragPos = isDraggingElement ? dragOffsetsRef.current[el.id] : null;
+                            const baseX = dragPos ? dragPos.x : el.x;
+                            const baseY = dragPos ? dragPos.y : el.y;
+                            const pixelX = baseX + (el.width * marker.x / 100);
+                            const pixelY = baseY + (el.height * marker.y / 100);
+                            const counterScale = 100 / zoom;
 
                             return (
-                                <div key={marker.id} style={{ left: pixelX, top: pixelY }} className="absolute z-50 group/marker -translate-x-1/2 -translate-y-full pb-1 cursor-default">
+                                <div key={marker.id} style={{ left: pixelX, top: pixelY, transform: `translate(-50%, -100%) scale(${counterScale})`, transformOrigin: 'bottom center' }} className="absolute z-50 group/marker pb-1 cursor-default">
                                     <div className="relative">
                                         <div className="w-8 h-8 rounded-full bg-[#3B82F6] border-2 border-white shadow-lg flex items-center justify-center text-white font-bold text-sm relative z-10">
                                             {marker.id}
@@ -4740,6 +4742,10 @@ const Workspace: React.FC = () => {
                                 </div>
                             )
                         })}
+                        {/* Floating Toolbars — inside transform layer for automatic pan/zoom tracking */}
+                        {renderImageToolbar()}
+                        {renderGenVideoToolbar()}
+                        {renderMultiSelectToolbar()}
                     </div>
                 </div>
             </div>

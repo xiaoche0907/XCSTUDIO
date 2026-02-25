@@ -70,9 +70,11 @@ interface ExecutionConfig {
 
 const DEFAULT_EXECUTION_CONFIG: ExecutionConfig = {
     maxRetries: 0,
-    timeout: 300000,
+    timeout: 600000,  // 10 分钟（图片生成 + 分析可能需要较长时间）
     enableCache: true
 };
+
+const SKILL_TIMEOUT = 120_000; // 单个 skill 最多 120 秒
 
 export abstract class EnhancedBaseAgent {
     protected chat: Chat | null = null;
@@ -527,7 +529,7 @@ ${(attachments || []).map((file, index) => {
                     responseMimeType: 'application/json'
                 },
                 ...toolConfig
-            }));
+            }), 1);  // 1 次重试即可，减少超时风险
 
             const parsedPlan = this.parseResponse(response.text || '{}');
 
@@ -643,7 +645,12 @@ ${(attachments || []).map((file, index) => {
                     }
                 }
 
-                const result = await executeSkill(call.skillName, call.params);
+                const result = await Promise.race([
+                    executeSkill(call.skillName, call.params),
+                    new Promise<never>((_, reject) =>
+                        setTimeout(() => reject(new Error(`Skill ${call.skillName} 执行超时(120s)`)), SKILL_TIMEOUT)
+                    )
+                ]);
                 results.push({ ...call, result, success: true });
             } catch (error) {
                 const appError = errorHandler.handleError(error, {
