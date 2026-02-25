@@ -13,6 +13,7 @@ export const geminiImageProvider: ImageProvider = {
       aspectRatio: request.aspectRatio,
       imageSize: request.imageSize,
       referenceImage: request.referenceImage,
+      referenceImages: request.referenceImages,
     });
   }
 };

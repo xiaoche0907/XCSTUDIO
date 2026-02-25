@@ -3,6 +3,7 @@ export interface ImageGenerationRequest {
   aspectRatio: string;
   imageSize?: '1K' | '2K' | '4K';
   referenceImage?: string; // base64
+  referenceImages?: string[];
 }
 
 export interface VideoGenerationRequest {

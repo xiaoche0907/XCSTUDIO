@@ -18,6 +18,7 @@ export async function imageGenSkill(params: ImageGenSkillParams): Promise<string
       aspectRatio: params.aspectRatio,
       imageSize: params.imageSize || '2K',
       referenceImage: params.referenceImage,
+      referenceImages: params.referenceImages,
     },
     params.model
   );

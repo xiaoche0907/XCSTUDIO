@@ -34,6 +34,7 @@ export interface CanvasElement {
 
   // Image Gen Reference
   genRefImage?: string;
+  genRefImages?: string[];
 
   // Video Gen Specifics
   genStartFrame?: string;
@@ -91,6 +92,7 @@ export interface ChatMessage {
     title?: string;
     description?: string;
     imageUrls?: string[];
+    videoUrls?: string[];
     adjustments?: string[];
     analysis?: string;
   };

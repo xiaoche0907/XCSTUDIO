@@ -7,6 +7,7 @@ export interface ImageGenSkillParams {
   aspectRatio: string;
   imageSize?: '1K' | '2K' | '4K';
   referenceImage?: string;
+  referenceImages?: string[];
   brandContext?: {
     colors?: string[];
     style?: string;

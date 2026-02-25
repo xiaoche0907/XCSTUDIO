@@ -82,7 +82,9 @@ VITE_YUNWU_API_URL=https://yunwu.ai
 
 所有 API 配置信息都存储在浏览器的 `localStorage` 中：
 
-- `custom_api_key` - 用户配置的 API Key
+- `gemini_api_key` - Gemini 原生 API Key
+- `yunwu_api_key` - 云雾 API Key
+- `custom_api_key` - 自定义 API Key
 - `api_provider` - 选择的 API 提供商 (`gemini` | `yunwu` | `custom`)
 - `custom_api_url` - 自定义 API URL（仅自定义模式）
 

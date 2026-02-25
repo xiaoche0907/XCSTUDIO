@@ -11,8 +11,19 @@ export const getApiKey = () => {
         if (key) return key;
     }
 
-    // 2. 其次使用 localStorage 中用户设置的 key
-    const localKey = localStorage.getItem('custom_api_key');
+    // 2. 其次使用 localStorage 中用户设置的对应提供商 key
+    const provider = localStorage.getItem('api_provider') || 'gemini';
+    let localKey = '';
+
+    if (provider === 'gemini') localKey = localStorage.getItem('gemini_api_key') || '';
+    else if (provider === 'yunwu') localKey = localStorage.getItem('yunwu_api_key') || '';
+    else if (provider === 'custom') localKey = localStorage.getItem('custom_api_key') || '';
+
+    // 为了兼容老用户，如果新字段没有，尝试取老字段
+    if (!localKey) {
+        localKey = localStorage.getItem('custom_api_key') || '';
+    }
+
     if (localKey) return localKey;
 
     // 3. 最后才使用环境变量（可选）
@@ -49,7 +60,7 @@ export const getClient = () => {
     const config: any = { apiKey: getApiKey() };
     const baseUrl = getApiUrl();
     if (baseUrl) {
-        config.baseUrl = baseUrl; // Optimistically pass baseUrl for proxy support
+        config.httpOptions = { baseUrl }; // @google/genai SDK uses httpOptions.baseUrl
     }
     return new GoogleGenAI(config);
 };
@@ -306,7 +317,8 @@ export interface ImageGenerationConfig {
     model: 'Nano Banana' | 'Nano Banana Pro';
     aspectRatio: string;
     imageSize?: '1K' | '2K' | '4K';
-    referenceImage?: string; // base64
+    referenceImage?: string; // base64 (legacy)
+    referenceImages?: string[]; // Multiple base64 images
 }
 
 export const generateImage = async (config: ImageGenerationConfig): Promise<string | null> => {
@@ -329,10 +341,13 @@ export const generateImage = async (config: ImageGenerationConfig): Promise<stri
 
     const parts: any[] = [{ text: config.prompt }];
 
-    if (config.referenceImage) {
-        const matches = config.referenceImage.match(/^data:(.+);base64,(.+)$/);
+    // Handle multiple references (preferred) or single reference
+    const imagesToProcess = config.referenceImages || (config.referenceImage ? [config.referenceImage] : []);
+
+    for (const imgBase64 of imagesToProcess) {
+        const matches = imgBase64.match(/^data:(.+);base64,(.+)$/);
         if (matches) {
-            parts.unshift({
+            parts.push({
                 inlineData: {
                     mimeType: matches[1],
                     data: matches[2]

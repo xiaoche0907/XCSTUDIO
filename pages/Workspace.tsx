@@ -76,7 +76,38 @@ const VIDEO_RATIOS = [
     { label: '1:1', value: '1:1', icon: 'square' },
 ];
 
-type ToolType = 'select' | 'hand' | 'mark';
+type ToolType = 'select' | 'hand' | 'mark' | 'insert' | 'shape' | 'text' | 'brush' | 'eraser';
+
+// Utility to compress image to max dimensions to save storage and improve performance
+const compressImage = (file: File, maxDim: number = 1024): Promise<string> => {
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                let width = img.width;
+                let height = img.height;
+                if (width > maxDim || height > maxDim) {
+                    if (width > height) {
+                        height = (height / width) * maxDim;
+                        width = maxDim;
+                    } else {
+                        width = (width / height) * maxDim;
+                        height = maxDim;
+                    }
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx?.drawImage(img, 0, 0, width, height);
+                resolve(canvas.toDataURL('image/jpeg', 0.85));
+            };
+            img.src = e.target?.result as string;
+        };
+        reader.readAsDataURL(file);
+    });
+};
 
 // Utility to convert Base64 to File
 const dataURLtoFile = (dataUrl: string, filename: string): File => {
@@ -647,6 +678,19 @@ const Workspace: React.FC = () => {
 
             if (resultUrl) {
                 setElements(prev => prev.map(el => el.id === id ? { ...el, isGenerating: false, url: resultUrl } : el));
+
+                // 同步结果到消息列表，使其出现在已生成文件列表中
+                setMessages(prev => [...prev, {
+                    id: Date.now().toString(),
+                    role: 'model',
+                    text: `已为您完成智能生成：${prompt.slice(0, 30)}${prompt.length > 30 ? '...' : ''}`,
+                    timestamp: Date.now(),
+                    agentData: {
+                        model: 'Nano Banana',
+                        title: '智能生成',
+                        imageUrls: [resultUrl]
+                    }
+                }]);
             } else {
                 setElements(prev => prev.map(el => el.id === id ? { ...el, isGenerating: false } : el));
             }
@@ -1611,7 +1655,7 @@ const Workspace: React.FC = () => {
                 model: model,
                 aspectRatio: currentAspectRatio,
                 imageSize: el.genResolution,
-                referenceImage: el.genRefImage
+                referenceImages: el.genRefImages || (el.genRefImage ? [el.genRefImage] : [])
             });
             if (resultUrl) {
                 const img = new Image();
@@ -1620,6 +1664,19 @@ const Workspace: React.FC = () => {
                     const update2 = elements.map(e => e.id === elementId ? { ...e, isGenerating: false, url: resultUrl } : e);
                     setElements(update2);
                     saveToHistory(update2, markers);
+
+                    // 同步结果到消息列表，使其出现在已生成文件列表中
+                    setMessages(prev => [...prev, {
+                        id: Date.now().toString(),
+                        role: 'model',
+                        text: `已完成图片生成：${el.genPrompt.slice(0, 30)}${el.genPrompt.length > 30 ? '...' : ''}`,
+                        timestamp: Date.now(),
+                        agentData: {
+                            model: el.genModel || 'Nano Banana Pro',
+                            title: '生成图片',
+                            imageUrls: [resultUrl]
+                        }
+                    }]);
                 };
             } else {
                 const updateFail = elements.map(e => e.id === elementId ? { ...e, isGenerating: false } : e);
@@ -1657,6 +1714,19 @@ const Workspace: React.FC = () => {
                 const update2 = elements.map(e => e.id === elementId ? { ...e, isGenerating: false, url: resultUrl } : e);
                 setElements(update2);
                 saveToHistory(update2, markers);
+
+                // 同步结果到消息列表，使其出现在已生成文件列表中
+                setMessages(prev => [...prev, {
+                    id: Date.now().toString(),
+                    role: 'model',
+                    text: `已完成视频生成：${el.genPrompt.slice(0, 30)}${el.genPrompt.length > 30 ? '...' : ''}`,
+                    timestamp: Date.now(),
+                    agentData: {
+                        model: el.genModel || 'Veo 3.1 Fast',
+                        title: '生成视频',
+                        videoUrls: [resultUrl]
+                    }
+                }]);
             } else {
                 const updateFail = elements.map(e => e.id === elementId ? { ...e, isGenerating: false } : e);
                 setElements(updateFail);
@@ -1827,15 +1897,29 @@ const Workspace: React.FC = () => {
             reader.readAsDataURL(file);
         });
     };
-    const handleRefImageUpload = (e: React.ChangeEvent<HTMLInputElement>, elementId: string) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const result = event.target?.result as string;
-            updateSelectedElement({ genRefImage: result });
-        };
-        reader.readAsDataURL(file);
+    const handleRefImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, elementId: string) => {
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
+
+        const el = elements.find(e => e.id === elementId);
+        if (!el) return;
+
+        const currentImages = el.genRefImages || (el.genRefImage ? [el.genRefImage] : []);
+        if (currentImages.length >= 6) return; // Hard limit
+
+        const remainingSlots = 6 - currentImages.length;
+        const filesToProcess = Array.from(files).slice(0, remainingSlots);
+
+        const newImages = [...currentImages];
+        for (const file of filesToProcess) {
+            const compressedBase64 = await compressImage(file);
+            newImages.push(compressedBase64);
+        }
+
+        updateSelectedElement({
+            genRefImages: newImages,
+            genRefImage: newImages[0] // sync first image for legacy support
+        });
     };
 
 
@@ -2331,11 +2415,15 @@ const Workspace: React.FC = () => {
             try {
                 const agentResult = await processMessage(agentText, filesToSend, { enableWebSearch });
 
-                // Collect generated image URLs from assets (base-agent already auto-generates)
+                // Collect generated image and video URLs from assets
                 let generatedUrls: string[] = [];
+                let generatedVideos: string[] = [];
                 if (agentResult?.output?.assets && agentResult.output.assets.length > 0) {
                     for (const asset of agentResult.output.assets) {
-                        if (asset.url) generatedUrls.push(asset.url);
+                        if (asset.url) {
+                            if (asset.type === 'video') generatedVideos.push(asset.url);
+                            else generatedUrls.push(asset.url);
+                        }
                     }
                 }
 
@@ -2344,6 +2432,9 @@ const Workspace: React.FC = () => {
                     for (const proposal of agentResult.output.proposals) {
                         if ((proposal as any).generatedUrl) {
                             generatedUrls.push((proposal as any).generatedUrl);
+                        }
+                        if ((proposal as any).generatedVideoUrl) {
+                            generatedVideos.push((proposal as any).generatedVideoUrl);
                         }
                     }
                 }
@@ -2435,6 +2526,7 @@ const Workspace: React.FC = () => {
                             ? allProposals.map((p: any, i: number) => `${i + 1}. ${p.title}: ${p.description || ''}`).join('\n')
                             : (firstProposal as any)?.description || undefined,
                         imageUrls: generatedUrls.length > 0 ? generatedUrls : undefined,
+                        videoUrls: generatedVideos.length > 0 ? generatedVideos : undefined,
                         adjustments,
                     }
                 }]);
@@ -2679,6 +2771,41 @@ const Workspace: React.FC = () => {
                         onKeyDown={(e) => e.stopPropagation()}
                     />
 
+                    {/* Multiple Ref Images Preview */}
+                    {(el.genRefImages && el.genRefImages.length > 0) ? (
+                        <div className="flex gap-2 mb-4 overflow-x-auto pb-1 max-w-full no-scrollbar">
+                            {el.genRefImages.map((img, idx) => (
+                                <div key={idx} className="relative w-14 h-14 shrink-0 group/ref">
+                                    <img src={img} className="w-full h-full object-cover rounded-xl border border-gray-100 shadow-sm" />
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            const newImages = [...(el.genRefImages || [])];
+                                            newImages.splice(idx, 1);
+                                            updateSelectedElement({
+                                                genRefImages: newImages,
+                                                genRefImage: newImages[0] || undefined
+                                            });
+                                        }}
+                                        className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-white border border-gray-100 rounded-full flex items-center justify-center text-gray-400 hover:text-red-500 shadow-sm transition-all hover:scale-110 active:scale-95 z-10"
+                                    >
+                                        <X size={10} strokeWidth={3} />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    ) : el.genRefImage ? (
+                        <div className="relative w-14 h-14 mb-4 group/ref ml-1">
+                            <img src={el.genRefImage} className="w-full h-full object-cover rounded-xl border border-gray-100 shadow-sm" />
+                            <button
+                                onClick={(e) => { e.stopPropagation(); updateSelectedElement({ genRefImage: undefined, genRefImages: [] }); }}
+                                className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-white border border-gray-100 rounded-full flex items-center justify-center text-gray-400 hover:text-red-500 shadow-sm transition-all hover:scale-110 active:scale-95 z-10"
+                            >
+                                <X size={10} strokeWidth={3} />
+                            </button>
+                        </div>
+                    ) : null}
+
                     <div className="flex items-center justify-between border-t border-gray-100/80 pt-4">
                         <div className="flex items-center gap-2">
                             {/* Model Picker */}
@@ -2705,9 +2832,10 @@ const Workspace: React.FC = () => {
                             </div>
 
                             {/* Ref Image Button */}
-                            <button className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-50 rounded-full transition border border-transparent hover:border-gray-200" title="Reference Image">
+                            <label className={`p-2 rounded-full transition border border-transparent hover:border-gray-200 cursor-pointer relative ${((el.genRefImages?.length || 0) >= 6) ? 'opacity-30 cursor-not-allowed' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`} title="Reference Image">
                                 <ImagePlus size={18} strokeWidth={1.5} />
-                            </button>
+                                <input type="file" accept="image/*" multiple className="hidden" disabled={(el.genRefImages?.length || 0) >= 6} onChange={(e) => handleRefImageUpload(e, el.id)} />
+                            </label>
                         </div>
 
                         <div className="flex items-center gap-3">
@@ -2739,10 +2867,11 @@ const Workspace: React.FC = () => {
                                     {el.genAspectRatio || '1:1'} <ChevronDown size={10} className="opacity-50" />
                                 </button>
                                 {showRatioPicker && (
-                                    <div className="absolute bottom-full mb-2 right-0 w-28 bg-white rounded-xl shadow-xl border border-gray-100 p-1 z-[60]">
-                                        {['1:1', '4:3', '3:4', '16:9', '9:16'].map(r => (
-                                            <button key={r} onClick={() => { updateSelectedElement({ genAspectRatio: r }); setShowRatioPicker(false); }} className={`w-full text-left px-3 py-2 hover:bg-gray-50 rounded-lg text-xs transition ${el.genAspectRatio === r ? 'text-blue-600 font-bold bg-blue-50/30' : 'text-gray-600'}`}>
-                                                {r}
+                                    <div className="absolute bottom-full mb-2 right-0 w-44 bg-white rounded-xl shadow-xl border border-gray-100 p-1 z-[60] max-h-72 overflow-y-auto">
+                                        {ASPECT_RATIOS.map(r => (
+                                            <button key={r.value} onClick={() => { updateSelectedElement({ genAspectRatio: r.value }); setShowRatioPicker(false); }} className={`w-full text-left px-3 py-2 hover:bg-gray-50 rounded-lg text-xs transition flex items-center justify-between ${el.genAspectRatio === r.value ? 'text-blue-600 font-bold bg-blue-50/30' : 'text-gray-600'}`}>
+                                                <span>{r.label}</span>
+                                                <span className="text-[10px] text-gray-400 font-mono">{r.size}</span>
                                             </button>
                                         ))}
                                     </div>
@@ -2753,9 +2882,11 @@ const Workspace: React.FC = () => {
                             <button
                                 onClick={() => handleGenImage(el.id)}
                                 disabled={!el.genPrompt || el.isGenerating}
-                                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${!el.genPrompt || el.isGenerating ? 'bg-gray-200 text-gray-400' : 'bg-gray-300 hover:bg-black text-white'}`}
+                                className={`h-8 px-3 rounded-xl flex items-center gap-1.5 transition-all font-bold text-[11px] ${!el.genPrompt || el.isGenerating ? 'bg-gray-100 text-gray-400' : 'bg-[#CBD5E1] hover:bg-black text-white'}`}
                             >
-                                {el.isGenerating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} fill="currentColor" />}
+                                {el.isGenerating ? <Loader2 size={14} className="animate-spin" /> : (
+                                    <Zap size={14} fill="currentColor" />
+                                )}
                             </button>
                         </div>
                     </div>
@@ -3592,27 +3723,40 @@ const Workspace: React.FC = () => {
                                 /* 已生成文件列表 */
                                 <div className="p-2">
                                     {(() => {
-                                        const allFiles = messages.flatMap((m, mi) =>
-                                            (m.agentData?.imageUrls || []).map((url, fi) => ({
+                                        const allFiles = messages.flatMap((m, mi) => {
+                                            const imgs = (m.agentData?.imageUrls || []).map((url, fi) => ({
                                                 url,
+                                                type: 'image' as const,
                                                 title: m.agentData?.title || `生成图片 ${mi + 1}-${fi + 1}`,
                                                 time: m.timestamp,
                                                 model: m.agentData?.model || 'AI'
-                                            }))
-                                        );
+                                            }));
+                                            const vids = (m.agentData?.videoUrls || []).map((url, fi) => ({
+                                                url,
+                                                type: 'video' as const,
+                                                title: m.agentData?.title || `生成视频 ${mi + 1}-${fi + 1}`,
+                                                time: m.timestamp,
+                                                model: m.agentData?.model || 'AI'
+                                            }));
+                                            return [...imgs, ...vids];
+                                        });
                                         if (allFiles.length === 0) {
                                             return <div className="py-16 text-center text-xs text-gray-400">暂无文件</div>;
                                         }
                                         return allFiles.reverse().map((file, i) => (
-                                            <div key={i} className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-gray-50 cursor-pointer transition group" onClick={() => setPreviewUrl(file.url)}>
-                                                <div className="w-10 h-10 rounded-md overflow-hidden flex-shrink-0 border border-gray-100 bg-gray-50">
-                                                    <img src={file.url} className="w-full h-full object-cover" alt="" />
+                                            <div key={i} className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-gray-50 cursor-pointer transition group" onClick={() => file.type === 'image' ? setPreviewUrl(file.url) : window.open(file.url)}>
+                                                <div className="w-10 h-10 rounded-md overflow-hidden flex-shrink-0 border border-gray-100 bg-gray-50 flex items-center justify-center">
+                                                    {file.type === 'image' ? (
+                                                        <img src={file.url} className="w-full h-full object-cover" alt="" />
+                                                    ) : (
+                                                        <Video size={16} className="text-gray-400" />
+                                                    )}
                                                 </div>
                                                 <div className="flex-1 min-w-0">
                                                     <div className="text-xs font-medium text-gray-700 truncate">{file.title}</div>
                                                     <div className="text-[10px] text-gray-400 mt-0.5">{file.model} · {new Date(file.time).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</div>
                                                 </div>
-                                                <a href={file.url} download={`${file.title}.png`} onClick={(e) => e.stopPropagation()} className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-gray-700 transition"><Download size={13} /></a>
+                                                <a href={file.url} download={`${file.title}.${file.type === 'image' ? 'png' : 'mp4'}`} onClick={(e) => e.stopPropagation()} className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-gray-700 transition"><Download size={13} /></a>
                                             </div>
                                         ));
                                     })()}
@@ -3740,14 +3884,23 @@ const Workspace: React.FC = () => {
                                                 <span className="text-[10px] text-gray-400">{messages.flatMap(m => m.agentData?.imageUrls || []).length} 个文件</span>
                                             </div>
                                             {(() => {
-                                                const allFiles = messages.flatMap((m, mi) =>
-                                                    (m.agentData?.imageUrls || []).map((url, fi) => ({
+                                                const allFiles = messages.flatMap((m, mi) => {
+                                                    const imgs = (m.agentData?.imageUrls || []).map((url, fi) => ({
                                                         url,
+                                                        type: 'image' as const,
                                                         title: m.agentData?.title || `生成图片 ${mi + 1}-${fi + 1}`,
                                                         time: m.timestamp,
                                                         model: m.agentData?.model || 'AI'
-                                                    }))
-                                                );
+                                                    }));
+                                                    const vids = (m.agentData?.videoUrls || []).map((url, fi) => ({
+                                                        url,
+                                                        type: 'video' as const,
+                                                        title: m.agentData?.title || `生成视频 ${mi + 1}-${fi + 1}`,
+                                                        time: m.timestamp,
+                                                        model: m.agentData?.model || 'AI'
+                                                    }));
+                                                    return [...imgs, ...vids];
+                                                });
                                                 if (allFiles.length === 0) {
                                                     return (
                                                         <div className="h-[250px] flex flex-col items-center justify-center text-gray-400 gap-2">
@@ -3759,9 +3912,13 @@ const Workspace: React.FC = () => {
                                                 return (
                                                     <div className="max-h-[350px] overflow-y-auto no-scrollbar p-2 space-y-1">
                                                         {allFiles.reverse().map((file, i) => (
-                                                            <div key={i} className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-gray-50 cursor-pointer transition group" onClick={() => setPreviewUrl(file.url)}>
-                                                                <div className="w-10 h-10 rounded-md overflow-hidden flex-shrink-0 border border-gray-100 bg-gray-50">
-                                                                    <img src={file.url} className="w-full h-full object-cover" alt="" />
+                                                            <div key={i} className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-gray-50 cursor-pointer transition group" onClick={() => file.type === 'image' ? setPreviewUrl(file.url) : window.open(file.url)}>
+                                                                <div className="w-10 h-10 rounded-md overflow-hidden flex-shrink-0 border border-gray-100 bg-gray-50 flex items-center justify-center">
+                                                                    {file.type === 'image' ? (
+                                                                        <img src={file.url} className="w-full h-full object-cover" alt="" />
+                                                                    ) : (
+                                                                        <Video size={16} className="text-gray-400" />
+                                                                    )}
                                                                 </div>
                                                                 <div className="flex-1 min-w-0">
                                                                     <div className="text-xs font-medium text-gray-700 truncate">{file.title}</div>
@@ -3771,7 +3928,7 @@ const Workspace: React.FC = () => {
                                                                         <span>{new Date(file.time).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span>
                                                                     </div>
                                                                 </div>
-                                                                <a href={file.url} download={`${file.title}.png`} onClick={(e) => e.stopPropagation()} className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-gray-700 transition">
+                                                                <a href={file.url} download={`${file.title}.${file.type === 'image' ? 'png' : 'mp4'}`} onClick={(e) => e.stopPropagation()} className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-gray-700 transition">
                                                                     <Download size={14} />
                                                                 </a>
                                                             </div>
@@ -4775,7 +4932,6 @@ const Workspace: React.FC = () => {
                                                     </div>
                                                     <div className="flex-1 flex items-center justify-center relative group-hover:bg-blue-50/50 transition-colors">
                                                         {el.isGenerating ? (<div className="flex flex-col items-center gap-3"> <Loader2 size={32} className="animate-spin text-blue-500" /> <span className="text-xs text-blue-400 font-medium">Creating magic...</span> </div>) : (<div className="flex flex-col items-center gap-2 text-blue-200"> <ImageIcon size={48} strokeWidth={1.5} /> </div>)}
-                                                        {el.genRefImage && !el.url && (<div className="absolute bottom-3 right-3 w-12 h-12 border-2 border-white shadow-sm rounded-lg overflow-hidden bg-gray-100"> <img src={el.genRefImage} className="w-full h-full object-cover opacity-80" /> </div>)}
                                                     </div>
                                                 </>
                                             )}

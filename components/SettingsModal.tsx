@@ -12,7 +12,9 @@ import { createPortal } from 'react-dom';
 type ApiProvider = 'gemini' | 'yunwu' | 'custom';
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
-    const [apiKey, setApiKey] = useState('');
+    const [geminiApiKey, setGeminiApiKey] = useState('');
+    const [yunwuApiKey, setYunwuApiKey] = useState('');
+    const [customApiKey, setCustomApiKey] = useState('');
     const [apiUrl, setApiUrl] = useState('');
     const [apiProvider, setApiProvider] = useState<ApiProvider>('gemini');
     const [replicateKey, setReplicateKey] = useState('');
@@ -23,10 +25,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
 
     useEffect(() => {
         if (isOpen) {
-            const currentKey = localStorage.getItem('custom_api_key') || '';
+            const currentGeminiKey = localStorage.getItem('gemini_api_key') || localStorage.getItem('custom_api_key') || '';
+            const currentYunwuKey = localStorage.getItem('yunwu_api_key') || localStorage.getItem('custom_api_key') || '';
+            const currentCustomKey = localStorage.getItem('custom_api_key') || '';
             const currentUrl = localStorage.getItem('custom_api_url') || '';
             const currentProvider = (localStorage.getItem('api_provider') as ApiProvider) || 'gemini';
-            setApiKey(currentKey);
+            setGeminiApiKey(currentGeminiKey);
+            setYunwuApiKey(currentYunwuKey);
+            setCustomApiKey(currentCustomKey);
             setApiUrl(currentUrl);
             setApiProvider(currentProvider);
             setReplicateKey(localStorage.getItem('replicate_api_key') || '');
@@ -49,7 +55,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     const handleSave = () => {
         setIsSaving(true);
         setTimeout(() => {
-            localStorage.setItem('custom_api_key', apiKey);
+            localStorage.setItem('gemini_api_key', geminiApiKey);
+            localStorage.setItem('yunwu_api_key', yunwuApiKey);
+            localStorage.setItem('custom_api_key', customApiKey);
             localStorage.setItem('api_provider', apiProvider);
 
             if (apiProvider === 'yunwu') {
@@ -131,8 +139,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                                             type="button"
                                             onClick={() => handleProviderChange('gemini')}
                                             className={`px-3 py-2.5 rounded-xl text-sm font-medium border-2 transition-all ${apiProvider === 'gemini'
-                                                    ? 'bg-blue-50 border-blue-500 text-blue-700'
-                                                    : 'bg-gray-50 border-gray-200 text-gray-600 hover:border-gray-300'
+                                                ? 'bg-blue-50 border-blue-500 text-blue-700'
+                                                : 'bg-gray-50 border-gray-200 text-gray-600 hover:border-gray-300'
                                                 }`}
                                         >
                                             Gemini 原生
@@ -141,8 +149,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                                             type="button"
                                             onClick={() => handleProviderChange('yunwu')}
                                             className={`px-3 py-2.5 rounded-xl text-sm font-medium border-2 transition-all ${apiProvider === 'yunwu'
-                                                    ? 'bg-purple-50 border-purple-500 text-purple-700'
-                                                    : 'bg-gray-50 border-gray-200 text-gray-600 hover:border-gray-300'
+                                                ? 'bg-purple-50 border-purple-500 text-purple-700'
+                                                : 'bg-gray-50 border-gray-200 text-gray-600 hover:border-gray-300'
                                                 }`}
                                         >
                                             云雾 API
@@ -151,8 +159,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                                             type="button"
                                             onClick={() => handleProviderChange('custom')}
                                             className={`px-3 py-2.5 rounded-xl text-sm font-medium border-2 transition-all ${apiProvider === 'custom'
-                                                    ? 'bg-green-50 border-green-500 text-green-700'
-                                                    : 'bg-gray-50 border-gray-200 text-gray-600 hover:border-gray-300'
+                                                ? 'bg-green-50 border-green-500 text-green-700'
+                                                : 'bg-gray-50 border-gray-200 text-gray-600 hover:border-gray-300'
                                                 }`}
                                         >
                                             自定义
@@ -170,8 +178,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                                     <div className="relative group">
                                         <input
                                             type={isVisible ? "text" : "password"}
-                                            value={apiKey}
-                                            onChange={(e) => setApiKey(e.target.value)}
+                                            value={apiProvider === 'gemini' ? geminiApiKey : apiProvider === 'yunwu' ? yunwuApiKey : customApiKey}
+                                            onChange={(e) => {
+                                                if (apiProvider === 'gemini') setGeminiApiKey(e.target.value);
+                                                else if (apiProvider === 'yunwu') setYunwuApiKey(e.target.value);
+                                                else setCustomApiKey(e.target.value);
+                                            }}
                                             placeholder="sk-..."
                                             className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all font-mono text-sm pr-10 hover:border-gray-300"
                                             autoFocus
@@ -255,7 +267,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                                         type="password"
                                         value={klingKey}
                                         onChange={(e) => setKlingKey(e.target.value)}
-                            placeholder="kling-..."
+                                        placeholder="kling-..."
                                         className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all font-mono text-sm hover:border-gray-300"
                                     />
                                     <p className="text-xs text-gray-400">用于可灵 AI 视频生成</p>
@@ -272,7 +284,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                                 </button>
                                 <button
                                     onClick={handleSave}
-                                    disabled={!apiKey.trim() || isSaving}
+                                    disabled={(apiProvider === 'gemini' && !geminiApiKey.trim()) || (apiProvider === 'yunwu' && !yunwuApiKey.trim()) || (apiProvider === 'custom' && !customApiKey.trim()) || isSaving}
                                     className={`px-6 py-2.5 rounded-xl text-sm font-bold text-white shadow-lg shadow-blue-500/25 flex items-center gap-2 transition-all active:scale-95 ${saveStatus === 'success' ? 'bg-green-500 border-green-500' : 'bg-black hover:bg-gray-900 border-transparent'
                                         }`}
                                 >
