@@ -17,7 +17,7 @@ import {
     Minimize2, Play, Film, Clock, SquarePen, Folder, PanelRightClose,
     Eraser, Scissors, Shirt, Expand, Crop, MonitorUp, Highlighter,
     Gift, Store, Layout, Copy, Info, MessageSquarePlus, File as FileIcon, CirclePlus,
-    Scan, ZoomIn, Scaling
+    Scan, ZoomIn, Scaling, Wand2
 } from 'lucide-react';
 import { createChatSession, sendMessage, generateImage, generateVideo, extractTextFromImage, analyzeImageRegion } from '../services/gemini';
 import { ChatMessage, Template, CanvasElement, ShapeType, Marker, Project } from '../types';
@@ -461,6 +461,8 @@ const Workspace: React.FC = () => {
 
     // Image Toolbar States
     const [upscaleMenuOpen, setUpscaleMenuOpen] = useState(false);
+    const [toolbarExpanded, setToolbarExpanded] = useState(false);
+    const toolbarExpandTimer = useRef<NodeJS.Timeout | null>(null);
     const [eraserMode, setEraserMode] = useState(false);
     const [brushSize, setBrushSize] = useState(30);
 
@@ -649,7 +651,7 @@ const Workspace: React.FC = () => {
     const handleSmartGenerate = async (prompt: string) => {
         const id = `gen-${Date.now()}`;
         // Calculate center of visible canvas area
-        const containerW = window.innerWidth - (showAssistant ? 400 : 0);
+        const containerW = window.innerWidth - (showAssistant ? 480 : 0);
         const containerH = window.innerHeight;
         const centerX = (containerW / 2 - pan.x) / (zoom / 100);
         const centerY = (containerH / 2 - pan.y) / (zoom / 100);
@@ -1038,7 +1040,7 @@ const Workspace: React.FC = () => {
         const contentWidth = maxX - minX;
         const contentHeight = maxY - minY;
         const padding = 100;
-        const containerW = window.innerWidth - (showAssistant ? 400 : 0);
+        const containerW = window.innerWidth - (showAssistant ? 480 : 0);
         const containerH = window.innerHeight;
         if (contentWidth <= 0 || contentHeight <= 0) return;
         const zoomW = (containerW - padding * 2) / contentWidth;
@@ -1570,7 +1572,7 @@ const Workspace: React.FC = () => {
     }, [selectedElementId, history, historyStep, elements, markers, selectedChipId]);
 
     const addElement = (type: 'image' | 'video', url: string, dims?: { width: number, height: number }) => {
-        const containerW = window.innerWidth - (showAssistant ? 400 : 0);
+        const containerW = window.innerWidth - (showAssistant ? 480 : 0);
         const containerH = window.innerHeight;
         const centerX = (containerW / 2 - pan.x) / (zoom / 100);
         const centerY = (containerH / 2 - pan.y) / (zoom / 100);
@@ -1583,7 +1585,7 @@ const Workspace: React.FC = () => {
     };
 
     const addShape = (shapeType: ShapeType) => {
-        const containerW = window.innerWidth - (showAssistant ? 400 : 0);
+        const containerW = window.innerWidth - (showAssistant ? 480 : 0);
         const containerH = window.innerHeight;
         const centerX = (containerW / 2 - pan.x) / (zoom / 100);
         const centerY = (containerH / 2 - pan.y) / (zoom / 100);
@@ -1610,10 +1612,10 @@ const Workspace: React.FC = () => {
         setShowShapeMenu(false);
     };
 
-    const addText = () => { const containerW = window.innerWidth - (showAssistant ? 400 : 0); const containerH = window.innerHeight; const centerX = (containerW / 2 - pan.x) / (zoom / 100); const centerY = (containerH / 2 - pan.y) / (zoom / 100); const newElement: CanvasElement = { id: Date.now().toString(), type: 'text', text: 'Type something...', x: centerX - 100, y: centerY - 25, width: 200, height: 50, fontSize: 90, fontFamily: 'Inter', fontWeight: 400, fillColor: '#000000', strokeColor: 'transparent', textAlign: 'left', zIndex: elements.length + 1 }; const newElements = [...elements, newElement]; setElements(newElements); saveToHistory(newElements, markers); setSelectedElementId(newElement.id); };
-    const addGenImage = () => { const containerW = window.innerWidth - (showAssistant ? 400 : 0); const containerH = window.innerHeight; const centerX = (containerW / 2 - pan.x) / (zoom / 100); const centerY = (containerH / 2 - pan.y) / (zoom / 100); const newElement: CanvasElement = { id: Date.now().toString(), type: 'gen-image', x: centerX - 512, y: centerY - 512, width: 1024, height: 1024, zIndex: elements.length + 1, genModel: 'Nano Banana Pro', genAspectRatio: '1:1', genResolution: '1K', genPrompt: '' }; const newElements = [...elements, newElement]; setElements(newElements); saveToHistory(newElements, markers); setSelectedElementId(newElement.id); };
+    const addText = () => { const containerW = window.innerWidth - (showAssistant ? 480 : 0); const containerH = window.innerHeight; const centerX = (containerW / 2 - pan.x) / (zoom / 100); const centerY = (containerH / 2 - pan.y) / (zoom / 100); const newElement: CanvasElement = { id: Date.now().toString(), type: 'text', text: 'Type something...', x: centerX - 100, y: centerY - 25, width: 200, height: 50, fontSize: 90, fontFamily: 'Inter', fontWeight: 400, fillColor: '#000000', strokeColor: 'transparent', textAlign: 'left', zIndex: elements.length + 1 }; const newElements = [...elements, newElement]; setElements(newElements); saveToHistory(newElements, markers); setSelectedElementId(newElement.id); };
+    const addGenImage = () => { const containerW = window.innerWidth - (showAssistant ? 480 : 0); const containerH = window.innerHeight; const centerX = (containerW / 2 - pan.x) / (zoom / 100); const centerY = (containerH / 2 - pan.y) / (zoom / 100); const newElement: CanvasElement = { id: Date.now().toString(), type: 'gen-image', x: centerX - 512, y: centerY - 512, width: 1024, height: 1024, zIndex: elements.length + 1, genModel: 'Nano Banana Pro', genAspectRatio: '1:1', genResolution: '1K', genPrompt: '' }; const newElements = [...elements, newElement]; setElements(newElements); saveToHistory(newElements, markers); setSelectedElementId(newElement.id); };
     const addGenVideo = () => {
-        const containerW = window.innerWidth - (showAssistant ? 400 : 0);
+        const containerW = window.innerWidth - (showAssistant ? 480 : 0);
         const containerH = window.innerHeight;
         const centerX = (containerW / 2 - pan.x) / (zoom / 100);
         const centerY = (containerH / 2 - pan.y) / (zoom / 100);
@@ -1763,7 +1765,7 @@ const Workspace: React.FC = () => {
                 if (type === 'image') {
                     const img = new Image();
                     img.onload = () => {
-                        const containerW = window.innerWidth - (showAssistant ? 400 : 0);
+                        const containerW = window.innerWidth - (showAssistant ? 480 : 0);
                         const containerH = window.innerHeight;
                         const centerX = (containerW / 2 - pan.x) / (zoom / 100);
                         const centerY = (containerH / 2 - pan.y) / (zoom / 100);
@@ -1795,7 +1797,7 @@ const Workspace: React.FC = () => {
                     };
                     img.src = result;
                 } else {
-                    const containerW = window.innerWidth - (showAssistant ? 400 : 0);
+                    const containerW = window.innerWidth - (showAssistant ? 480 : 0);
                     const containerH = window.innerHeight;
                     const centerX = (containerW / 2 - pan.x) / (zoom / 100);
                     const centerY = (containerH / 2 - pan.y) / (zoom / 100);
@@ -2441,7 +2443,7 @@ const Workspace: React.FC = () => {
 
                 // Place generated images on canvas
                 if (generatedUrls.length > 0) {
-                    const containerW = window.innerWidth - (showAssistant ? 400 : 0);
+                    const containerW = window.innerWidth - (showAssistant ? 480 : 0);
                     const containerH = window.innerHeight;
 
                     // If there are markers, place near the marker's source element
@@ -2609,7 +2611,7 @@ const Workspace: React.FC = () => {
         if (activeTool === 'hand') NavIcon = Hand;
 
         return (
-            <div className="absolute bottom-5 left-1/2 -translate-x-1/2 bg-white rounded-full shadow-[0_2px_20px_rgba(0,0,0,0.08)] border border-gray-200/60 px-2 py-1.5 flex flex-row gap-0.5 z-50 animate-in fade-in slide-in-from-bottom-4 duration-300 items-center" style={{ marginLeft: showAssistant ? '-200px' : '0' }}>
+            <div className="absolute bottom-5 left-1/2 -translate-x-1/2 bg-white rounded-full shadow-[0_2px_20px_rgba(0,0,0,0.08)] border border-gray-200/60 px-2 py-1.5 flex flex-row gap-0.5 z-50 animate-in fade-in slide-in-from-bottom-4 duration-300 items-center" style={{ marginLeft: showAssistant ? '-240px' : '0' }}>
                 {/* 1. Select / Hand */}
                 <div className="relative group/nav">
                     <button className={`p-2.5 rounded-xl transition ${['select', 'hand'].includes(activeTool) ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-black hover:bg-gray-100'}`}><NavIcon size={18} /></button>
@@ -2896,17 +2898,21 @@ const Workspace: React.FC = () => {
         // Only show if it has a URL (actual image)
         // if (!el.url && el.type === 'gen-image') return null; // This line is replaced by the above block
 
-        const topToolbarTop = elY - (86 * counterScale);
-        const bottomButtonTop = elY + el.height + (16 * counterScale);
+        // Calculate scaling logic (cap the scaling to avoid huge toolbars when zoomed in, keep them reasonable sized)
+        // Adjust baseline scale depending on viewport zoom
+        const adaptiveScale = Math.max(0.6, Math.min(1.2, zoom / 100));
+        const rightToolbarLeft = elX + el.width + (24 / adaptiveScale);
+        const topToolbarTop = elY;
+        const bottomButtonTop = elY + el.height + (16 / adaptiveScale);
 
         // Text Edit Modal logic
         if (showTextEditModal) {
-            const modalLeft = elX + el.width + (20 * counterScale);
+            const modalLeft = elX + el.width + (30 / adaptiveScale);
             const modalTop = elY;
             return (
                 <div
                     className="absolute bg-white rounded-xl shadow-xl border border-gray-200 p-4 z-[60] w-64 animate-in fade-in slide-in-from-left-2 duration-200 flex flex-col gap-2"
-                    style={{ left: modalLeft, top: modalTop, transform: `scale(${counterScale})`, transformOrigin: 'top left', pointerEvents: 'auto' }}
+                    style={{ left: modalLeft, top: modalTop, transform: `scale(${1 / adaptiveScale})`, transformOrigin: 'top left', pointerEvents: 'auto' }}
                     onMouseDown={(e) => e.stopPropagation()}
                 >
                     <div className="flex justify-between items-center mb-2">
@@ -2949,14 +2955,14 @@ const Workspace: React.FC = () => {
             return (
                 <>
                     {/* Top Hint */}
-                    <div className="absolute bg-white px-4 py-2 rounded-full shadow-lg border border-gray-100 flex items-center gap-2 text-sm text-gray-600 z-50 whitespace-nowrap animate-in slide-in-from-bottom-2 fade-in" style={{ left: canvasCenterX, top: topToolbarTop - (50 * counterScale), transform: `translateX(-50%) scale(${counterScale})`, transformOrigin: 'bottom center', pointerEvents: 'auto' }}>
+                    <div className="absolute bg-white px-4 py-2 rounded-full shadow-lg border border-gray-100 flex items-center gap-2 text-sm text-gray-600 z-50 whitespace-nowrap animate-in slide-in-from-bottom-2 fade-in" style={{ left: canvasCenterX, top: topToolbarTop - (50 / adaptiveScale), transform: `translateX(-50%) scale(${1 / adaptiveScale})`, transformOrigin: 'bottom center', pointerEvents: 'auto' }}>
                         <span>在图片上绘制选区，</span>
                         <kbd className="bg-gray-100 px-1.5 py-0.5 rounded text-xs border border-gray-200 font-sans">Alt</kbd> <span>擦除，</span>
                         <kbd className="bg-gray-100 px-1.5 py-0.5 rounded text-xs border border-gray-200 font-sans">Esc</kbd> <span>退出</span>
                     </div>
 
                     {/* Eraser Toolbar */}
-                    <div className="absolute bg-white rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-gray-100 p-2 flex items-center gap-3 z-50 animate-in zoom-in-95 fade-in duration-200" style={{ left: canvasCenterX, top: topToolbarTop, transform: `translateX(-50%) scale(${counterScale})`, transformOrigin: 'bottom center', pointerEvents: 'auto' }}>
+                    <div className="absolute bg-white rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-gray-100 p-2 flex items-center gap-3 z-50 animate-in zoom-in-95 fade-in duration-200" style={{ left: canvasCenterX, top: topToolbarTop, transform: `translateX(-50%) scale(${1 / adaptiveScale})`, transformOrigin: 'bottom center', pointerEvents: 'auto' }}>
                         <div className="flex items-center gap-2 px-2 border-r border-gray-100">
                             <Eraser size={18} className="text-blue-500 fill-blue-500/20" />
                             <span className="text-sm font-medium text-gray-900">擦除</span>
@@ -3003,88 +3009,124 @@ const Workspace: React.FC = () => {
 
         return (
             <>
-                <div id="active-floating-toolbar" className={`absolute bg-white rounded-xl shadow-[0_4px_12px_rgba(0,0,0,0.08)] border border-gray-100 px-2 py-1.5 flex items-center gap-1 z-50 ${isDraggingElement ? '' : 'animate-in fade-in zoom-in-95 duration-200'} whitespace-nowrap`} style={{ left: canvasCenterX, top: topToolbarTop, transform: `translateX(-50%) scale(${counterScale})`, transformOrigin: 'bottom center', pointerEvents: 'auto' }} onMouseDown={(e) => e.stopPropagation()}>
-
-                    {/* Upscale */}
-                    <div className="relative">
-                        <button
-                            onClick={() => setUpscaleMenuOpen(!upscaleMenuOpen)}
-                            className={`p-1.5 rounded-lg flex items-center gap-1.5 text-xs font-medium transition ${upscaleMenuOpen ? 'bg-gray-100 text-black' : 'text-gray-600 hover:text-black hover:bg-gray-50'}`}
-                        >
-                            <div className="relative w-3.5 h-3.5 border border-current rounded-[2px] flex items-center justify-center font-bold text-[8px]">HD</div> 放大
-                        </button>
-                        {upscaleMenuOpen && (
-                            <div className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.15)] border border-gray-100 p-1.5 flex flex-col gap-0.5 w-32 overflow-hidden z-[70] animate-in slide-in-from-top-1">
-                                <button onClick={() => handleUpscaleSelect(2)} className="text-left px-3 py-2 text-xs hover:bg-gray-50 rounded-lg flex justify-between items-center group">
-                                    <span>2x (2K)</span>
-                                    <span className="text-[10px] text-gray-400 group-hover:text-gray-600">Standard</span>
-                                </button>
-                                <button onClick={() => handleUpscaleSelect(4)} className="text-left px-3 py-2 text-xs hover:bg-blue-50 text-blue-600 rounded-lg font-medium flex justify-between items-center bg-blue-50/30">
-                                    <span>4x (4K)</span>
-                                    <Sparkles size={10} className="text-blue-500" />
-                                </button>
-                                <button onClick={() => handleUpscaleSelect(8)} className="text-left px-3 py-2 text-xs hover:bg-blue-50 text-blue-600 rounded-lg font-medium flex justify-between items-center">
-                                    <span>8x (Ultra)</span>
-                                    <span className="text-[10px] uppercase text-blue-400 border border-blue-200 px-1 rounded">Pro</span>
-                                </button>
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="w-px h-4 bg-gray-200 mx-0.5"></div>
-
-                    <button onClick={handleRemoveBg} className="p-1.5 text-gray-600 hover:text-black hover:bg-gray-50 rounded-lg flex items-center gap-1.5 text-xs font-medium">
-                        <div className="relative"><Eraser size={14} /><div className="absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 bg-white border border-gray-600 rounded-full"></div></div> 移除背景
-                    </button>
-                    <button className="p-1.5 text-gray-600 hover:text-black hover:bg-gray-50 rounded-lg flex items-center gap-1.5 text-xs font-medium">
-                        <Shirt size={14} /> Mockup
-                    </button>
-                    <button
-                        onClick={() => setEraserMode(true)}
-                        className="p-1.5 text-gray-600 hover:text-black hover:bg-gray-50 rounded-lg flex items-center gap-1.5 text-xs font-medium"
+                <div id="active-floating-toolbar" className={`absolute z-50 ${isDraggingElement ? '' : 'animate-in fade-in zoom-in-95 duration-200'} pointer-events-auto origin-top-left`} style={{ left: rightToolbarLeft, top: topToolbarTop, transform: `scale(${1 / adaptiveScale})` }} onMouseDown={(e) => e.stopPropagation()}>
+                    <div
+                        className={`flex flex-col bg-white rounded-[16px] p-2 shadow-[0_4px_24px_rgba(0,0,0,0.06),0_1px_3px_rgba(0,0,0,0.04)] border border-gray-100/80 items-stretch gap-0.5 transition-all duration-300 ease-out overflow-hidden ${toolbarExpanded ? 'w-[150px]' : 'w-[48px]'}`}
+                        onMouseEnter={() => { toolbarExpandTimer.current = setTimeout(() => setToolbarExpanded(true), 800); }}
+                        onMouseLeave={() => { if (toolbarExpandTimer.current) clearTimeout(toolbarExpandTimer.current); setToolbarExpanded(false); setUpscaleMenuOpen(false); }}
                     >
-                        <Eraser size={14} /> 擦除
-                    </button>
-                    <button className="p-1.5 text-gray-600 hover:text-black hover:bg-gray-50 rounded-lg flex items-center gap-1.5 text-xs font-medium">
-                        <Layers size={14} /> 编辑元素
-                    </button>
-                    <button onClick={handleEditTextClick} className="p-1.5 text-gray-600 hover:text-black hover:bg-gray-50 rounded-lg flex items-center gap-1.5 text-xs font-medium relative">
-                        <Type size={14} /> 编辑文字
-                        {el.type === 'gen-image' && <span className="absolute -top-1 -right-1 flex h-2 w-2 relative"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span></span>}
-                    </button>
-                    <button className="p-1.5 text-gray-600 hover:text-black hover:bg-gray-50 rounded-lg flex items-center gap-1.5 text-xs font-medium">
-                        <Expand size={14} /> 扩展
-                    </button>
+                        {/* 快捷编辑 - XC logo */}
+                        <div onClick={() => setShowFastEdit(true)} className={`flex items-center gap-2.5 px-2 py-1.5 rounded-[10px] cursor-pointer transition-all hover:bg-gray-50 ${toolbarExpanded ? 'justify-between' : 'justify-center'}`}>
+                            <div className="flex items-center gap-2.5 min-w-0">
+                                <span className="w-5 h-5 rounded-full bg-gray-900 text-white flex items-center justify-center text-[8px] font-black tracking-tighter leading-none flex-shrink-0">XC</span>
+                                {toolbarExpanded && <span className="text-[13px] font-medium text-gray-800 whitespace-nowrap">快捷编辑</span>}
+                            </div>
+                            {toolbarExpanded && <span className="text-[11px] text-gray-400 font-medium flex-shrink-0">Tab</span>}
+                        </div>
 
-                    <div className="w-px h-4 bg-gray-200 mx-0.5"></div>
+                        {/* 放大 HD */}
+                        <div className="relative">
+                            <button onClick={() => setUpscaleMenuOpen(!upscaleMenuOpen)} className={`w-full flex items-center gap-2.5 px-2 py-1.5 text-gray-600 hover:bg-gray-50 rounded-[10px] transition-colors ${toolbarExpanded ? '' : 'justify-center'}`}>
+                                <div className="border-[1.5px] border-current rounded-[3px] w-4 h-4 flex items-center justify-center text-[8px] font-black tracking-tighter flex-shrink-0">HD</div>
+                                {toolbarExpanded && <span className="text-[13px] whitespace-nowrap">放大</span>}
+                            </button>
+                            {upscaleMenuOpen && (
+                                <div className="absolute top-0 left-full ml-2 bg-white rounded-xl shadow-xl border border-gray-100 p-1.5 flex flex-col gap-0.5 w-32 overflow-hidden z-[70] animate-in slide-in-from-left-2">
+                                    <button onClick={() => handleUpscaleSelect(2)} className="text-left px-3 py-2 text-sm hover:bg-gray-50 text-gray-700 rounded-lg flex justify-between items-center group"><span>2x (2K)</span><span className="text-[10px] text-gray-400 group-hover:text-gray-600">Standard</span></button>
+                                    <button onClick={() => handleUpscaleSelect(4)} className="text-left px-3 py-2 text-sm hover:bg-gray-50 text-gray-700 rounded-lg font-medium flex justify-between items-center"><span>4x (4K)</span><Sparkles size={12} className="text-blue-500" /></button>
+                                    <button onClick={() => handleUpscaleSelect(8)} className="text-left px-3 py-2 text-sm hover:bg-gray-50 text-gray-700 rounded-lg font-medium flex justify-between items-center"><span>8x (Ultra)</span><span className="text-[10px] uppercase text-blue-500 border border-blue-200 bg-blue-50 px-1 rounded">Pro</span></button>
+                                </div>
+                            )}
+                        </div>
 
-                    <button className="p-1.5 text-gray-600 hover:text-black hover:bg-gray-50 rounded-lg flex items-center justify-center w-8">
-                        <MoreHorizontal size={14} />
-                    </button>
+                        {/* 去背景 */}
+                        <button onClick={handleRemoveBg} className={`w-full flex items-center gap-2.5 px-2 py-1.5 text-gray-600 hover:bg-gray-50 rounded-[10px] transition-colors ${toolbarExpanded ? '' : 'justify-center'}`}>
+                            <Wand2 size={16} strokeWidth={2} className="flex-shrink-0" />
+                            {toolbarExpanded && <span className="text-[13px] whitespace-nowrap">去背景</span>}
+                        </button>
 
-                    <button onClick={handleDownload} className="p-1.5 text-gray-600 hover:text-black hover:bg-gray-50 rounded-lg flex items-center justify-center w-8">
-                        <Download size={14} />
-                    </button>
+                        {/* Mockup */}
+                        <button className={`w-full flex items-center gap-2.5 px-2 py-1.5 text-gray-600 hover:bg-gray-50 rounded-[10px] transition-colors ${toolbarExpanded ? '' : 'justify-center'}`}>
+                            <Shirt size={16} strokeWidth={2} className="flex-shrink-0" />
+                            {toolbarExpanded && <span className="text-[13px] whitespace-nowrap">Mockup</span>}
+                        </button>
+
+                        {/* 橡皮工具 */}
+                        <button onClick={() => setEraserMode(true)} className={`w-full flex items-center gap-2.5 px-2 py-1.5 text-gray-600 hover:bg-gray-50 rounded-[10px] transition-colors ${toolbarExpanded ? '' : 'justify-center'}`}>
+                            <Eraser size={16} strokeWidth={2} className="flex-shrink-0" />
+                            {toolbarExpanded && <span className="text-[13px] whitespace-nowrap">橡皮工具</span>}
+                        </button>
+
+                        {/* 编辑元素 */}
+                        <button className={`w-full flex items-center gap-2.5 px-2 py-1.5 text-gray-600 hover:bg-gray-50 rounded-[10px] transition-colors ${toolbarExpanded ? '' : 'justify-center'}`}>
+                            <Layers size={16} strokeWidth={2} className="flex-shrink-0" />
+                            {toolbarExpanded && <span className="text-[13px] whitespace-nowrap">编辑元素</span>}
+                        </button>
+
+                        {/* 编辑文字 */}
+                        <button onClick={handleEditTextClick} className={`w-full flex items-center gap-2.5 px-2 py-1.5 text-gray-600 hover:bg-gray-50 rounded-[10px] transition-colors ${toolbarExpanded ? '' : 'justify-center'}`}>
+                            <Type size={16} strokeWidth={2} className="flex-shrink-0" />
+                            {toolbarExpanded && <span className="text-[13px] whitespace-nowrap">编辑文字</span>}
+                        </button>
+
+                        {/* 多角度 */}
+                        <button className={`w-full flex items-center gap-2.5 px-2 py-1.5 text-gray-600 hover:bg-gray-50 rounded-[10px] transition-colors relative ${toolbarExpanded ? '' : 'justify-center'}`}>
+                            <div className="relative flex-shrink-0"><Box size={16} strokeWidth={2} /><span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-blue-500 rounded-full"></span></div>
+                            {toolbarExpanded && <span className="text-[13px] whitespace-nowrap">多角度</span>}
+                        </button>
+
+                        {/* 扩展 */}
+                        <button className={`w-full flex items-center gap-2.5 px-2 py-1.5 text-gray-600 hover:bg-gray-50 rounded-[10px] transition-colors ${toolbarExpanded ? '' : 'justify-center'}`}>
+                            <Expand size={16} strokeWidth={2} className="flex-shrink-0" />
+                            {toolbarExpanded && <span className="text-[13px] whitespace-nowrap">扩展</span>}
+                        </button>
+
+                        {/* 调整 */}
+                        <button className={`w-full flex items-center gap-2.5 px-2 py-1.5 text-gray-600 hover:bg-gray-50 rounded-[10px] transition-colors relative ${toolbarExpanded ? '' : 'justify-center'}`}>
+                            <div className="relative flex-shrink-0"><MonitorUp size={16} strokeWidth={2} className="rotate-90" /><span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-blue-500 rounded-full"></span></div>
+                            {toolbarExpanded && <span className="text-[13px] whitespace-nowrap">调整</span>}
+                        </button>
+
+                        {/* 裁剪 */}
+                        <button className={`w-full flex items-center gap-2.5 px-2 py-1.5 text-gray-600 hover:bg-gray-50 rounded-[10px] transition-colors ${toolbarExpanded ? '' : 'justify-center'}`}>
+                            <Crop size={16} strokeWidth={2} className="flex-shrink-0" />
+                            {toolbarExpanded && <span className="text-[13px] whitespace-nowrap">裁剪</span>}
+                        </button>
+
+                        {/* 矢量 */}
+                        <button className={`w-full flex items-center gap-2.5 px-2 py-1.5 text-gray-600 hover:bg-gray-50 rounded-[10px] transition-colors relative ${toolbarExpanded ? '' : 'justify-center'}`}>
+                            <div className="relative flex-shrink-0"><Scaling size={16} strokeWidth={2} /><span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-blue-500 rounded-full"></span></div>
+                            {toolbarExpanded && <span className="text-[13px] whitespace-nowrap">矢量</span>}
+                        </button>
+
+                        {/* divider */}
+                        <div className="h-px bg-gray-100 mx-1 my-0.5"></div>
+
+                        {/* 下载 */}
+                        <button onClick={handleDownload} className={`w-full flex items-center gap-2.5 px-2 py-1.5 text-gray-600 hover:bg-gray-50 rounded-[10px] transition-colors ${toolbarExpanded ? '' : 'justify-center'}`}>
+                            <Download size={16} strokeWidth={2} className="flex-shrink-0" />
+                            {toolbarExpanded && <span className="text-[13px] whitespace-nowrap">下载</span>}
+                        </button>
+                    </div>
                 </div>
 
-                {showFastEdit ? (
-                    <div id="active-floating-toolbar-fast-edit" className="absolute bg-white rounded-xl shadow-lg border border-gray-200 p-2 z-50 animate-in fade-in zoom-in-95 duration-200 w-64" style={{ left: canvasCenterX, top: bottomButtonTop, transform: `translateX(-50%) scale(${counterScale})`, transformOrigin: 'top center', pointerEvents: 'auto' }} onMouseDown={(e) => e.stopPropagation()}>
-                        <textarea autoFocus className="w-full text-sm text-gray-700 placeholder:text-gray-300 bg-transparent border-none outline-none resize-none h-16 mb-1 p-1" placeholder="Describe your edit here" value={fastEditPrompt} onChange={(e) => setFastEditPrompt(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleFastEditRun(); } e.stopPropagation(); }} />
-                        <div className="flex justify-end">
-                            <button onClick={handleFastEditRun} disabled={!fastEditPrompt || el.isGenerating} className="bg-gray-500 hover:bg-black text-white text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition disabled:opacity-50">
-                                {el.isGenerating ? <Loader2 size={12} className="animate-spin" /> : null}
-                                生成 {el.isGenerating ? '' : <span className="opacity-50 font-normal">↵</span>}
-                            </button>
+                {/* Bottom Center Fast Edit Mode Tool when active */}
+                {showFastEdit && (
+                    <div id="active-floating-toolbar-fast-edit" className="absolute bg-white rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-gray-100 p-2 z-50 animate-in fade-in zoom-in-95 duration-200 w-[320px]" style={{ left: canvasCenterX, top: bottomButtonTop, transform: `translateX(-50%) scale(${1 / adaptiveScale})`, transformOrigin: 'top center', pointerEvents: 'auto' }} onMouseDown={(e) => e.stopPropagation()}>
+                        <textarea autoFocus className="w-full text-[13px] text-gray-800 placeholder:text-gray-400 bg-transparent border-none outline-none resize-none h-14 mb-2 p-1" placeholder="Describe your edit here..." value={fastEditPrompt} onChange={(e) => setFastEditPrompt(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleFastEditRun(); } e.stopPropagation(); }} />
+                        <div className="flex justify-between items-center px-1">
+                            <span className="text-[11px] text-gray-400 pointer-events-none">Hit Return to generate</span>
+                            <div className="flex gap-2">
+                                <button onClick={() => setShowFastEdit(false)} className="px-3 py-1.5 rounded-lg text-gray-500 text-xs font-medium hover:bg-gray-50 transition">Cancel</button>
+                                <button onClick={handleFastEditRun} disabled={!fastEditPrompt || el.isGenerating} className="bg-gray-900 hover:bg-black text-white text-xs font-medium px-4 py-1.5 rounded-lg flex items-center gap-1.5 transition disabled:opacity-50">
+                                    {el.isGenerating ? <Loader2 size={12} className="animate-spin" /> : null}
+                                    生成 {el.isGenerating ? '' : <span className="opacity-60 font-normal">↵</span>}
+                                </button>
+                            </div>
                         </div>
                     </div>
-                ) : (
-                    <div id="active-floating-toolbar-fast-edit" onClick={() => setShowFastEdit(true)} className="absolute bg-white rounded-xl shadow-sm border border-gray-200 px-4 py-2 z-50 animate-in fade-in duration-300 flex items-center gap-2 cursor-pointer hover:shadow-md transition group whitespace-nowrap" style={{ left: canvasCenterX, top: bottomButtonTop, transform: `translateX(-50%) scale(${counterScale})`, transformOrigin: 'top center', pointerEvents: 'auto' }} onMouseDown={(e) => e.stopPropagation()}>
-                        <span className="text-sm text-gray-700 font-medium group-hover:text-black">快捷编辑</span>
-                        <span className="text-xs text-gray-400 border border-gray-200 rounded px-1.5 py-0.5 ml-1">Tab</span>
-                    </div>
                 )}
-            </>
-        );
+            </>);
     };
 
     const renderGenVideoToolbar = () => {
@@ -3098,18 +3140,19 @@ const Workspace: React.FC = () => {
         const elX = dragPos ? dragPos.x : el.x;
         const elY = dragPos ? dragPos.y : el.y;
         const canvasCenterX = elX + el.width / 2;
-        const counterScale = 100 / zoom;
+        // Calculate adaptive scaling logic for video toolbar
+        const adaptiveScale = Math.max(0.6, Math.min(1.2, zoom / 100));
 
         if (el.url) {
             // Generated state
-            const topToolbarTop = elY - (60 * counterScale);
+            const topToolbarTop = elY - (60 / adaptiveScale);
             return (
-                <div id="active-floating-toolbar" className={`absolute bg-white rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-gray-100/50 px-2 py-1.5 flex items-center gap-1 z-50 ${isDraggingElement ? '' : 'animate-in fade-in zoom-in-95 duration-200'} whitespace-nowrap backdrop-blur-sm`} style={{ left: canvasCenterX, top: topToolbarTop, transform: `translateX(-50%) scale(${counterScale})`, transformOrigin: 'bottom center', pointerEvents: 'auto' }} onMouseDown={(e) => e.stopPropagation()}>
-                    <button className="px-2.5 py-1.5 text-gray-600 hover:text-black hover:bg-gray-50 rounded-lg flex items-center gap-2 text-xs font-medium transition-colors group">
-                        <div className="border-[1.5px] border-current rounded-[3px] px-0.5 text-[8px] font-bold opacity-70 group-hover:opacity-100 transition-opacity">HD</div>
+                <div id="active-floating-toolbar" className={`absolute bg-white rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-gray-100/50 px-2 py-1.5 flex items-center gap-1 z-50 ${isDraggingElement ? '' : 'animate-in fade-in zoom-in-95 duration-200'} whitespace-nowrap backdrop-blur-sm`} style={{ left: canvasCenterX, top: topToolbarTop, transform: `translateX(-50%) scale(${1 / adaptiveScale})`, transformOrigin: 'bottom center', pointerEvents: 'auto' }} onMouseDown={(e) => e.stopPropagation()}>
+                    <button className="px-2.5 py-1.5 text-gray-600 hover:text-black hover:bg-gray-50 rounded-lg flex items-center gap-2 text-[13px] font-medium transition-colors group">
+                        <div className="border-[1.5px] border-current rounded-[3px] px-0.5 text-[9px] font-bold opacity-70 group-hover:opacity-100 transition-opacity">HD</div>
                         放大
                     </button>
-                    <button className="px-2.5 py-1.5 text-gray-600 hover:text-black hover:bg-gray-50 rounded-lg flex items-center gap-2 text-xs font-medium transition-colors group">
+                    <button className="px-2.5 py-1.5 text-gray-600 hover:text-black hover:bg-gray-50 rounded-lg flex items-center gap-2 text-[13px] font-medium transition-colors group">
                         <div className="relative"><Eraser size={14} className="opacity-70 group-hover:opacity-100 transition-opacity" /><div className="absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 bg-white border border-gray-600 rounded-full"></div></div>
                         移除背景
                     </button>
@@ -3121,9 +3164,9 @@ const Workspace: React.FC = () => {
             );
         } else {
             // Config state
-            const toolbarTop = elY + el.height + (16 * counterScale);
+            const toolbarTop = elY + el.height + (16 / adaptiveScale);
             return (
-                <div id="active-floating-toolbar" className="absolute bg-white rounded-2xl shadow-[0_4px_20px_rgb(0,0,0,0.08)] border border-gray-100 z-50 animate-in fade-in zoom-in-95 duration-200 min-w-[420px]" style={{ left: canvasCenterX, top: toolbarTop, transform: `translateX(-50%) scale(${counterScale})`, transformOrigin: 'top center', pointerEvents: 'auto' }} onMouseDown={(e) => e.stopPropagation()}>
+                <div id="active-floating-toolbar" className="absolute bg-white rounded-2xl shadow-[0_4px_20px_rgb(0,0,0,0.08)] border border-gray-100 z-50 animate-in fade-in zoom-in-95 duration-200 min-w-[420px]" style={{ left: canvasCenterX, top: toolbarTop, transform: `translateX(-50%) scale(${1 / adaptiveScale})`, transformOrigin: 'top center', pointerEvents: 'auto' }} onMouseDown={(e) => e.stopPropagation()}>
                     {/* Prompt textarea */}
                     <div className="p-3 pb-0">
                         <textarea placeholder="今天我们要创作什么" className="w-full text-sm text-gray-700 placeholder:text-gray-400 bg-transparent border-none outline-none resize-none h-16 p-1" value={el.genPrompt || ''} onChange={(e) => updateSelectedElement({ genPrompt: e.target.value })} onKeyDown={(e) => e.stopPropagation()} />
@@ -3774,7 +3817,7 @@ const Workspace: React.FC = () => {
                         animate={{ x: 0, opacity: 1 }}
                         exit={{ x: 400, opacity: 0 }}
                         transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                        className="absolute top-4 right-4 w-[400px] bottom-4 bg-white rounded-2xl shadow-lg border border-gray-200/60 z-40 flex flex-col overflow-hidden"
+                        className="absolute top-0 right-0 w-[480px] h-full bg-[#f8f9fc] border-l border-gray-200 shadow-[-10px_0_30px_rgba(0,0,0,0.03)] z-40 flex flex-col overflow-hidden"
                     >
                         {/* Header with Toolbar - Lovart Style */}
                         <div className="px-3 py-2.5 flex items-center justify-between border-b border-gray-100 z-20 shrink-0 select-none">
@@ -4017,7 +4060,7 @@ const Workspace: React.FC = () => {
                                         >
                                             {msg.role === 'user' ? (
                                                 msg.skillData ? (
-                                                    <div className="max-w-[85%] rounded-xl px-3 py-2 text-sm shadow-sm bg-white border border-gray-200 text-gray-800 flex flex-col gap-2 relative overflow-hidden group transition">
+                                                    <div className="max-w-[85%] rounded-[20px] rounded-tr-sm px-3 py-2 text-[13px] bg-gray-100 text-gray-800 flex flex-col gap-2 relative overflow-hidden group transition">
                                                         <div className="flex items-center gap-2">
                                                             {msg.skillData.iconName === 'Store' && <Store size={15} className="text-gray-500" strokeWidth={2} />}
                                                             {msg.skillData.iconName === 'Layout' && <Layout size={15} className="text-gray-500" strokeWidth={2} />}
@@ -4156,10 +4199,9 @@ const Workspace: React.FC = () => {
 
 
 
-                        {/* Input Area - Lovart Style with Mode Support */}
                         <div className="px-3 pb-3 pt-1 z-20">
                             <div
-                                className={`bg-white rounded-2xl border shadow-sm transition-all duration-200 relative group focus-within:shadow-md flex flex-col ${isDragOver ? 'border-blue-400 ring-2 ring-blue-100 bg-blue-50/30' : 'border-gray-200'}`}
+                                className={`bg-white rounded-2xl border shadow-sm transition-all duration-200 relative group focus-within:shadow-md focus-within:border-gray-300 flex flex-col ${isDragOver ? 'border-blue-400 ring-2 ring-blue-100 bg-blue-50/30' : 'border-gray-200'}`}
                                 onMouseEnter={() => setIsVideoPanelHovered(true)}
                                 onMouseLeave={() => setIsVideoPanelHovered(false)}
                                 onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(true); }}
@@ -4272,7 +4314,7 @@ const Workspace: React.FC = () => {
                                 )}
 
                                 {/* Text Input Area - Lovart style: inline mixed chips + text */}
-                                <div className={`px-4 py-2.5 cursor-text transition-all ${isInputFocused ? '' : ''}`} onClick={(e) => {
+                                <div className={`px-4 pt-3 pb-6 cursor-text transition-all`} onClick={(e) => {
                                     // 仅在点击空白区域时聚焦最后的文本框（不干扰 chip 点击）
                                     if (e.target === e.currentTarget || (e.target as HTMLElement).closest('.input-flow-container') === e.currentTarget.querySelector('.input-flow-container')) {
                                         const lastText = inputBlocks.filter(b => b.type === 'text').pop();
@@ -4282,7 +4324,7 @@ const Workspace: React.FC = () => {
                                     }
                                 }}>
                                     {/* Inline flow: chips and text in a single line */}
-                                    <div className="input-flow-container flex flex-wrap items-center gap-1" style={{ minHeight: '28px', wordBreak: 'break-word', lineHeight: '28px' }}>
+                                    <div className="input-flow-container flex flex-wrap items-center gap-1.5" style={{ minHeight: '28px', wordBreak: 'break-word', lineHeight: '28px' }}>
                                         {inputBlocks.map((block, blockIndex) => {
                                             if (block.type === 'file' && block.file) {
                                                 const file = block.file!;
@@ -4307,54 +4349,58 @@ const Workspace: React.FC = () => {
                                                             initial={{ scale: 0, opacity: 0 }}
                                                             animate={{ scale: 1, opacity: 1 }}
                                                             transition={{ type: 'spring', stiffness: 400, damping: 20 }}
-                                                            className={`inline-flex items-center gap-1.5 rounded-md pl-1 pr-1.5 cursor-default relative group select-none h-6 transition-all border ${isSelected
+                                                            className={`inline-flex items-center gap-1.5 rounded-lg pl-1 pr-2 cursor-default relative group select-none h-7 transition-all border ${isSelected
                                                                 ? 'bg-blue-50 border-blue-200 ring-1 ring-blue-500'
-                                                                : 'bg-gray-50 border-gray-100 hover:bg-gray-100'
+                                                                : 'bg-white border-gray-200 hover:bg-gray-50'
                                                                 }`}
                                                             onClick={(e) => { e.stopPropagation(); setSelectedChipId(isSelected ? null : block.id); }}
                                                             onMouseEnter={() => setHoveredChipId(block.id)}
                                                             onMouseLeave={() => setHoveredChipId(null)}
                                                         >
-                                                            <div className="w-5 h-5 rounded-sm overflow-hidden border border-gray-200 flex-shrink-0">
-                                                                <img src={URL.createObjectURL(file)} className="w-full h-full object-cover" />
+                                                            <div className="flex items-center">
+                                                                <div className="w-[22px] h-[22px] rounded-[4px] overflow-hidden border border-gray-200 flex-shrink-0">
+                                                                    <img src={URL.createObjectURL(file)} className="w-full h-full object-cover" />
+                                                                </div>
+                                                                <div className="w-[14px] h-[14px] bg-[#3B82F6] rounded-full flex items-center justify-center text-white text-[7px] font-bold shadow-sm flex-shrink-0 border border-white -ml-2 z-10">
+                                                                    {markerId}
+                                                                </div>
                                                             </div>
-                                                            <div className="w-4 h-4 bg-[#3B82F6] rounded-sm flex items-center justify-center text-white text-[9px] font-bold shadow-sm flex-shrink-0">
-                                                                {markerId}
-                                                            </div>
-                                                            <span className="text-[11px] text-gray-700 font-medium max-w-[80px] truncate">{(file as any).markerName || '区域'}</span>
-                                                            <ChevronDown size={12} className="text-gray-400" />
+                                                            <span className="text-[12px] text-gray-700 font-medium max-w-[80px] truncate ml-0.5">{(file as any).markerName || '区域'}</span>
+                                                            <ChevronDown size={14} className="text-gray-400" />
                                                             <button onClick={(e) => { e.stopPropagation(); removeInputBlock(block.id); setSelectedChipId(null); }} className="absolute -top-1.5 -right-1.5 bg-gray-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition shadow-sm z-20 hover:bg-gray-700"><X size={8} /></button>
 
                                                             {/* Hover Preview Tooltip */}
-                                                            {isHovered && markerInfo?.fullImageUrl && (() => {
+                                                            {isHovered && markerInfo && (() => {
                                                                 const chipEl = document.getElementById(`marker-chip-${block.id}`);
                                                                 const chipRect = chipEl?.getBoundingClientRect();
-                                                                const tooltipW = 280;
-                                                                const tooltipH = 200;
-                                                                const ttLeft = chipRect ? chipRect.left - tooltipW - 12 : 0;
-                                                                const ttTop = chipRect ? chipRect.top + chipRect.height / 2 - tooltipH / 2 : 0;
+                                                                const tooltipW = 160;
+                                                                const tooltipH = 160;
+                                                                const ttLeft = chipRect ? chipRect.left + chipRect.width / 2 - tooltipW / 2 : 0;
+                                                                const ttTop = chipRect ? chipRect.top - tooltipH - 12 : 0;
+
                                                                 const ox = markerInfo.x !== undefined && markerInfo.imageWidth ? ((markerInfo.x + markerInfo.width! / 2) / markerInfo.imageWidth) * 100 : 50;
                                                                 const oy = markerInfo.y !== undefined && markerInfo.imageHeight ? ((markerInfo.y! + markerInfo.height! / 2) / markerInfo.imageHeight!) * 100 : 50;
                                                                 const zoomOrigin = `${ox}% ${oy}%`;
-                                                                const zoomTransition = { duration: 0.8, ease: [0.25, 0.46, 0.45, 0.94] as const, delay: 0.3 };
+                                                                const zoomTransition = { duration: 0.8, ease: [0.25, 0.46, 0.45, 0.94] as const, delay: 0.1 };
+                                                                const imgSrc = markerInfo.fullImageUrl || URL.createObjectURL(file);
+
                                                                 return ReactDOM.createPortal(
-                                                                    <div className="fixed z-[9999] pointer-events-none" style={{ left: ttLeft, top: ttTop, width: tooltipW }}>
-                                                                        <motion.div initial={{ opacity: 0, scale: 0.95, x: 10 }} animate={{ opacity: 1, scale: 1, x: 0 }} transition={{ duration: 0.2 }} className="bg-white rounded-xl shadow-2xl border border-gray-200 p-2 overflow-hidden relative">
-                                                                            <div className="relative rounded-lg overflow-hidden" style={{ height: 170 }}>
-                                                                                <motion.div className="absolute inset-0" initial={{ scale: 1 }} animate={{ scale: 2.5 }} transition={zoomTransition} style={{ transformOrigin: zoomOrigin }}>
-                                                                                    <img src={markerInfo.fullImageUrl} className="w-full h-full object-cover" />
-                                                                                </motion.div>
-                                                                                {markerInfo.x !== undefined && markerInfo.imageWidth && (
-                                                                                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3, delay: 0.9 }} className="absolute inset-0 pointer-events-none">
-                                                                                        <motion.div initial={{ scale: 1 }} animate={{ scale: 2.5 }} transition={zoomTransition} className="absolute inset-0" style={{ transformOrigin: zoomOrigin }}>
-                                                                                            <div className="absolute border-2 border-blue-500 rounded-sm" style={{ left: `${(markerInfo.x / markerInfo.imageWidth) * 100}%`, top: `${(markerInfo.y! / markerInfo.imageHeight!) * 100}%`, width: `${(markerInfo.width! / markerInfo.imageWidth) * 100}%`, height: `${(markerInfo.height! / markerInfo.imageHeight!) * 100}%` }}>
-                                                                                                <div className="absolute -top-2 -right-2 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center text-white text-[10px] font-bold shadow-lg">{markerId}</div>
+                                                                    <div className="fixed z-[9999] pointer-events-none" style={{ left: ttLeft, top: ttTop, width: tooltipW, height: tooltipH }}>
+                                                                        <motion.div initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ duration: 0.2 }} className="w-full h-full bg-white rounded-2xl shadow-xl overflow-hidden relative border border-gray-200">
+                                                                            <motion.div className="absolute inset-0" initial={{ scale: 1 }} animate={{ scale: 2.5 }} transition={zoomTransition} style={{ transformOrigin: zoomOrigin }}>
+                                                                                <img src={imgSrc} className="w-full h-full object-cover" />
+                                                                            </motion.div>
+                                                                            {markerInfo.x !== undefined && markerInfo.imageWidth && (
+                                                                                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3, delay: 0.7 }} className="absolute inset-0 pointer-events-none">
+                                                                                    <motion.div initial={{ scale: 1 }} animate={{ scale: 2.5 }} transition={zoomTransition} className="absolute inset-0" style={{ transformOrigin: zoomOrigin }}>
+                                                                                        <div className="absolute flex flex-col items-center" style={{ left: `${ox}%`, top: `${oy}%`, transform: 'translate(-50%, -50%)' }}>
+                                                                                            <div className="w-2.5 h-2.5 rounded-full bg-[#3B82F6] border border-white shadow-sm flex items-center justify-center text-white font-bold text-[5px] relative z-10 text-center">
+                                                                                                {markerId}
                                                                                             </div>
-                                                                                        </motion.div>
+                                                                                        </div>
                                                                                     </motion.div>
-                                                                                )}
-                                                                            </div>
-                                                                            <div className="absolute top-1/2 -right-[6px] -translate-y-1/2 w-3 h-3 bg-white border-r border-b border-gray-200 rotate-[-45deg]"></div>
+                                                                                </motion.div>
+                                                                            )}
                                                                         </motion.div>
                                                                     </div>,
                                                                     document.body
@@ -4371,7 +4417,7 @@ const Workspace: React.FC = () => {
                                                     return (
                                                         <div
                                                             key={block.id}
-                                                            className={`inline-flex flex-shrink-0 items-center gap-1 rounded-md pl-1 pr-1.5 select-none relative group h-6 cursor-default transition-all border ${isSelected
+                                                            className={`inline-flex flex-shrink-0 items-center gap-1 rounded-lg pl-1 pr-1.5 select-none relative group h-7 cursor-default transition-all border ${isSelected
                                                                 ? 'bg-blue-50 border-blue-200'
                                                                 : isInputFocused ? 'bg-gray-100 border-gray-200' : 'bg-gray-50 border-gray-100'
                                                                 }`}
@@ -4565,7 +4611,7 @@ const Workspace: React.FC = () => {
                                 </div>
 
                                 {/* Bottom Toolbar - Lovart: left (attach+mode) | right (controls+send) */}
-                                <div className="px-3 pb-2 pt-0.5 flex items-center justify-between">
+                                <div className="px-3 pb-4 pt-0 flex items-center justify-between">
                                     <div className="flex items-center gap-1">
                                         {/* Attachment Button (for Agent mode) */}
                                         {creationMode === 'agent' && (
@@ -4578,14 +4624,14 @@ const Workspace: React.FC = () => {
                                         <div className="relative">
                                             <button
                                                 onClick={() => setShowModeSelector(!showModeSelector)}
-                                                className={`h-7 px-3 rounded-full border flex items-center gap-1.5 text-xs font-medium transition-all ${creationMode === 'agent' ? 'bg-white border-blue-400/60 text-blue-500 shadow-sm' :
-                                                    creationMode === 'image' ? 'bg-white border-blue-400/60 text-blue-500 shadow-sm' :
-                                                        'bg-white border-blue-400/60 text-blue-500 shadow-sm'
+                                                className={`h-[30px] px-3.5 rounded-full flex items-center gap-1.5 text-[13px] font-medium transition-all ${creationMode === 'agent' ? 'bg-blue-50 text-[#3B82F6]' :
+                                                    creationMode === 'image' ? 'bg-blue-50 text-[#3B82F6]' :
+                                                        'bg-blue-50 text-[#3B82F6]'
                                                     }`}
                                             >
-                                                {creationMode === 'agent' && <><Sparkles size={12} strokeWidth={2} /> Agent</>}
-                                                {creationMode === 'image' && <><ImageIcon size={12} /> 图像</>}
-                                                {creationMode === 'video' && <><Video size={12} /> 视频</>}
+                                                {creationMode === 'agent' && <><Sparkles size={14} strokeWidth={2} /> Agent</>}
+                                                {creationMode === 'image' && <><ImageIcon size={14} /> 图像</>}
+                                                {creationMode === 'video' && <><Video size={14} /> 视频</>}
                                             </button>
 
                                             {/* Mode Dropdown */}
@@ -4638,11 +4684,11 @@ const Workspace: React.FC = () => {
                                         {/* Agent Mode: Enhanced Controls */}
                                         {creationMode === 'agent' && (
                                             <>
-                                                <div className="h-7 bg-gray-100/80 rounded-full flex items-center p-0.5 gap-0.5 relative">
+                                                <div className="h-8 bg-gray-100 rounded-full flex items-center p-1 gap-1 relative">
                                                     <div className="relative group/think">
                                                         <button
                                                             onClick={() => handleModeSwitch('thinking')}
-                                                            className={`w-6 h-6 flex items-center justify-center rounded-full transition-all ${modelMode === 'thinking' ? 'bg-white shadow-sm text-black ring-1 ring-black/5' : 'text-gray-400 hover:text-gray-600'}`}
+                                                            className={`w-6 h-6 flex items-center justify-center rounded-full transition-all ${modelMode === 'thinking' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-400 hover:text-gray-600'}`}
                                                         >
                                                             <Lightbulb size={14} strokeWidth={2} />
                                                         </button>
@@ -4655,7 +4701,7 @@ const Workspace: React.FC = () => {
                                                     <div className="relative group/fast">
                                                         <button
                                                             onClick={() => handleModeSwitch('fast')}
-                                                            className={`w-6 h-6 flex items-center justify-center rounded-full transition-all ${modelMode === 'fast' ? 'bg-white shadow-sm text-black ring-1 ring-black/5' : 'text-gray-400 hover:text-gray-600'}`}
+                                                            className={`w-6 h-6 flex items-center justify-center rounded-full transition-all ${modelMode === 'fast' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-400 hover:text-gray-600'}`}
                                                         >
                                                             <Zap size={14} strokeWidth={2} />
                                                         </button>
@@ -4666,17 +4712,17 @@ const Workspace: React.FC = () => {
                                                         </div>
                                                     </div>
                                                 </div>
-                                                <div className="relative group/web">
-                                                    <button onClick={() => setWebEnabled(!webEnabled)} className={`w-7 h-7 rounded-full flex items-center justify-center transition ${webEnabled ? 'bg-gray-800 text-white' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`}><Globe size={15} strokeWidth={1.8} /></button>
+                                                <div className="relative group/web border border-gray-200 rounded-full hover:bg-gray-50 transition">
+                                                    <button onClick={() => setWebEnabled(!webEnabled)} className={`w-8 h-8 rounded-full flex items-center justify-center transition ${webEnabled ? 'text-blue-500' : 'text-gray-500'}`}><Globe size={16} strokeWidth={1.8} /></button>
                                                     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover/web:opacity-100 transition pointer-events-none z-50 shadow-lg">
                                                         <div className="font-medium">联网搜索</div>
                                                         <div className="text-gray-400 text-[10px]">{webEnabled ? '已开启' : '已关闭'}</div>
                                                         <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 w-2 h-2 bg-gray-900 rotate-45"></div>
                                                     </div>
                                                 </div>
-                                                <div className="relative">
+                                                <div className="relative border border-gray-200 rounded-full hover:bg-gray-50 transition">
                                                     <div className="relative group/model">
-                                                        <button onClick={() => setShowModelPreference(!showModelPreference)} className={`w-7 h-7 rounded-full flex items-center justify-center transition ${showModelPreference ? 'bg-blue-500 text-white' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`}><Box size={15} strokeWidth={2} /></button>
+                                                        <button onClick={() => setShowModelPreference(!showModelPreference)} className={`w-8 h-8 rounded-full flex items-center justify-center transition ${showModelPreference ? 'text-blue-500' : 'text-gray-500'}`}><Box size={16} strokeWidth={2} /></button>
                                                         {!showModelPreference && (
                                                             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover/model:opacity-100 transition pointer-events-none z-50 shadow-lg">
                                                                 <div className="font-medium">模型偏好</div>
@@ -4772,7 +4818,7 @@ const Workspace: React.FC = () => {
 
             <div className="flex-1 relative flex flex-col h-full overflow-hidden">
                 {/* Top Bar - Lovart Style: minimal, transparent */}
-                <div className="absolute top-4 left-5 right-5 flex justify-between items-center z-30 pointer-events-none transition-all duration-300" style={{ paddingRight: showAssistant ? '420px' : '0' }}>
+                <div className="absolute top-4 left-5 right-5 flex justify-between items-center z-30 pointer-events-none transition-all duration-300" style={{ paddingRight: showAssistant ? '500px' : '0' }}>
                     <div className="flex items-center gap-3 pointer-events-auto">
                         <button onClick={() => navigate('/')} className="w-9 h-9 bg-black rounded-full flex items-center justify-center text-white font-bold text-[10px] tracking-wide shadow-sm hover:scale-105 transition">XC</button>
                         <div className="flex items-center gap-1.5 cursor-pointer hover:bg-white/60 px-2.5 py-1 rounded-full transition backdrop-blur-sm">
@@ -5021,19 +5067,33 @@ const Workspace: React.FC = () => {
                             const baseY = dragPos ? dragPos.y : el.y;
                             const pixelX = baseX + (el.width * marker.x / 100);
                             const pixelY = baseY + (el.height * marker.y / 100);
-                            const counterScale = 100 / zoom;
+                            const adaptiveMarkerScale = Math.max(0.6, Math.min(1.2, zoom / 100));
+
+                            // Determine if this marker is hovered via chat chip
+                            const isHoveredInChat = hoveredChipId && inputBlocks.some(b => b.id === hoveredChipId && b.type === 'file' && b.file && (b.file as any).markerId === marker.id);
 
                             return (
-                                <div key={marker.id} style={{ left: pixelX, top: pixelY, transform: `translate(-50%, -100%) scale(${counterScale})`, transformOrigin: 'bottom center' }} className="absolute z-50 group/marker pb-1 cursor-default">
-                                    <div className="relative">
-                                        <div className="w-8 h-8 rounded-full bg-[#3B82F6] border-2 border-white shadow-lg flex items-center justify-center text-white font-bold text-sm relative z-10">
+                                <div key={marker.id} style={{ left: pixelX, top: pixelY, transform: `translate(-50%, -100%) scale(${1 / adaptiveMarkerScale})`, transformOrigin: 'bottom center', pointerEvents: 'auto' }} className={`absolute z-50 group/marker cursor-pointer ${isHoveredInChat ? 'z-[60]' : ''}`} onClick={(e) => { e.stopPropagation(); setZoom(Math.max(100, zoom)); }}>
+                                    <motion.div
+                                        className="relative flex flex-col items-center"
+                                        initial={{ scale: 0, opacity: 0, y: 15 }}
+                                        animate={{ scale: isHoveredInChat ? 1.25 : 1, opacity: 1, y: 0 }}
+                                        whileHover={{ scale: 1.25 }}
+                                        transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                                        style={{ transformOrigin: 'bottom center' }}
+                                    >
+                                        <div className={`w-[14px] h-[14px] rounded-full bg-[#3B82F6] border border-white flex items-center justify-center text-white font-bold text-[7px] relative z-10 transition-colors duration-300 ${isHoveredInChat ? 'shadow-[0_0_0_3px_rgba(59,130,246,0.3)]' : 'shadow-sm'}`}>
                                             {marker.id}
                                         </div>
-                                        <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-[#3B82F6]"></div>
-                                    </div>
+                                        <div className="w-0 h-0 border-l-[2px] border-l-transparent border-r-[2px] border-r-transparent border-t-[3px] border-t-[#3B82F6] -mt-[0.5px]"></div>
+                                    </motion.div>
 
-                                    <div className="absolute left-full top-0 ml-2 bg-white rounded-xl shadow-xl border border-gray-100 px-3 py-2 whitespace-nowrap opacity-0 group-hover/marker:opacity-100 transition pointer-events-none flex flex-col gap-1 z-50">
-                                        <span className="text-xs font-bold text-gray-800">快捷编辑 <span className="text-[10px] font-normal text-gray-400 border border-gray-200 rounded px-1 ml-1">Tab</span></span>
+                                    {/* Quick Edit Pill (Dark, 800ms delay on Hover) - positioned to the right of the marker bubble */}
+                                    <div
+                                        className="absolute left-full top-0 ml-1.5 bg-gray-900/95 backdrop-blur-md rounded-full shadow-[0_8px_20px_rgb(0,0,0,0.15)] border border-gray-700/50 px-2.5 py-1 whitespace-nowrap opacity-0 scale-95 origin-left group-hover/marker:opacity-100 group-hover/marker:scale-100 transition-all duration-300 delay-0 group-hover/marker:delay-[800ms] flex items-center gap-1.5 z-50"
+                                    >
+                                        <span className="text-[10px] font-bold text-white tracking-wide">快捷编辑</span>
+                                        <span className="text-[9px] font-semibold text-gray-300 bg-gray-800 rounded-sm px-1 shadow-inner">Tab</span>
                                     </div>
                                 </div>
                             )
