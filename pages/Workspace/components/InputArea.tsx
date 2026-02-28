@@ -6,6 +6,7 @@ import {
     Image as ImageIcon, Check, Video, FileText, Banana, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { useAgentStore } from '../../../stores/agent.store';
+import { ImageModel, VideoModel } from '../../../types';
 
 const VIDEO_RATIOS = [
     { label: '16:9', value: '16:9', icon: 'rectangle-horizontal' },
@@ -71,18 +72,58 @@ const setCECursorPos = (el: HTMLElement, pos: number) => {
 interface InputAreaProps {
     creationMode: 'agent' | 'image' | 'video';
     setCreationMode: (mode: 'agent' | 'image' | 'video') => void;
-    handleSend: (text?: string) => void;
+    handleSend: (overridePrompt?: string, overrideAttachments?: File[], overrideWeb?: boolean, skillData?: any) => Promise<void>;
     handleModeSwitch: (mode: 'thinking' | 'fast') => void;
     fileInputRef: React.RefObject<HTMLInputElement | null>;
     selectedChipId: string | null;
     setSelectedChipId: (id: string | null) => void;
     hoveredChipId: string | null;
     setHoveredChipId: (id: string | null) => void;
+    // New props from Workspace
+    showModeSelector: boolean;
+    setShowModeSelector: (v: boolean) => void;
+    showModelPreference: boolean;
+    setShowModelPreference: (v: boolean) => void;
+    modelPreferenceTab: 'image' | 'video' | '3d';
+    setModelPreferenceTab: (tab: 'image' | 'video' | '3d') => void;
+    autoModelSelect: boolean;
+    setAutoModelSelect: (v: boolean) => void;
+    preferredImageModel: ImageModel;
+    setPreferredImageModel: (v: ImageModel) => void;
+    preferredVideoModel: VideoModel;
+    setPreferredVideoModel: (v: VideoModel) => void;
+    preferred3DModel: string;
+    setPreferred3DModel: (v: string) => void;
+    showRatioPicker: boolean;
+    setShowRatioPicker: (v: boolean) => void;
+    showModelPicker: boolean;
+    setShowModelPicker: (v: boolean) => void;
+    isInputFocused: boolean;
+    setIsInputFocused: (v: boolean) => void;
+    isDragOver: boolean;
+    setIsDragOver: (v: boolean) => void;
+    isVideoPanelHovered: boolean;
+    setIsVideoPanelHovered: (v: boolean) => void;
+    showVideoSettingsDropdown: boolean;
+    setShowVideoSettingsDropdown: (v: boolean) => void;
 }
 
 export const InputArea: React.FC<InputAreaProps> = ({
     creationMode, setCreationMode, handleSend, handleModeSwitch, fileInputRef,
     selectedChipId, setSelectedChipId, hoveredChipId, setHoveredChipId,
+    showModeSelector, setShowModeSelector,
+    showModelPreference, setShowModelPreference,
+    modelPreferenceTab, setModelPreferenceTab,
+    autoModelSelect, setAutoModelSelect,
+    preferredImageModel, setPreferredImageModel,
+    preferredVideoModel, setPreferredVideoModel,
+    preferred3DModel, setPreferred3DModel,
+    showRatioPicker, setShowRatioPicker,
+    showModelPicker, setShowModelPicker,
+    isInputFocused, setIsInputFocused,
+    isDragOver, setIsDragOver,
+    isVideoPanelHovered, setIsVideoPanelHovered,
+    showVideoSettingsDropdown, setShowVideoSettingsDropdown,
 }) => {
     const inputBlocks = useAgentStore(s => s.inputBlocks);
     const activeBlockId = useAgentStore(s => s.activeBlockId);
@@ -105,22 +146,9 @@ export const InputArea: React.FC<InputAreaProps> = ({
         setShowVideoModelDropdown, setWebEnabled, setIsAgentMode,
     } = useAgentStore(s => s.actions);
 
-    const [isDragOver, setIsDragOver] = useState(false);
-    const [isVideoPanelHovered, setIsVideoPanelHovered] = useState(false);
-    const [showModeSelector, setShowModeSelector] = useState(false);
-    const [showVideoSettingsDropdown, setShowVideoSettingsDropdown] = useState(false);
-    const [showModelPreference, setShowModelPreference] = useState(false);
-    const [modelPreferenceTab, setModelPreferenceTab] = useState<'image' | 'video' | '3d'>('image');
-    const [autoModelSelect, setAutoModelSelect] = useState(true);
-    const [preferredImageModel, setPreferredImageModel] = useState('NanoBanana2');
-    const [preferredVideoModel, setPreferredVideoModel] = useState('Veo 3.1');
-    const [preferred3DModel, setPreferred3DModel] = useState('Auto');
-    const [showRatioPicker, setShowRatioPicker] = useState(false);
-    const [showModelPicker, setShowModelPicker] = useState(false);
     const imageGenRatio = useAgentStore(s => s.imageGenRatio);
     const imageGenRes = useAgentStore(s => s.imageGenRes);
     const { setImageGenRatio, setImageGenRes } = useAgentStore(s => s.actions);
-    const [isInputFocused, setIsInputFocused] = useState(false);
 
     return (
         <div className="px-2 pb-2 pt-0.5 z-20">
@@ -411,7 +439,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
                                             {MODEL_OPTIONS.image.map(m => (
                                                 <button
                                                     key={m.id}
-                                                    onClick={() => { setPreferredImageModel(m.id); setShowModelPicker(false); setAutoModelSelect(false); }}
+                                                    onClick={() => { setPreferredImageModel(m.id as ImageModel); setShowModelPicker(false); setAutoModelSelect(false); }}
                                                     className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs transition-colors ${preferredImageModel === m.id && !autoModelSelect ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-700 hover:bg-gray-50'}`}
                                                 >
                                                     <div className="text-left">
@@ -455,7 +483,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
                                             </div>
                                             <div className="space-y-1.5 max-h-48 overflow-y-auto">
                                                 {MODEL_OPTIONS[modelPreferenceTab].map(m => (
-                                                    <div key={m.id} onClick={() => { if (modelPreferenceTab === 'image') setPreferredImageModel(m.id); else if (modelPreferenceTab === 'video') setPreferredVideoModel(m.id); else setPreferred3DModel(m.id); setAutoModelSelect(false); }} className={`flex items-center justify-between p-2.5 rounded-xl cursor-pointer hover:bg-gray-50 ${(!autoModelSelect && ((modelPreferenceTab === 'image' && preferredImageModel === m.id) || (modelPreferenceTab === 'video' && preferredVideoModel === m.id) || (modelPreferenceTab === '3d' && preferred3DModel === m.id))) ? 'bg-blue-50' : ''}`}>
+                                                    <div key={m.id} onClick={() => { if (modelPreferenceTab === 'image') setPreferredImageModel(m.id as ImageModel); else if (modelPreferenceTab === 'video') setPreferredVideoModel(m.id as VideoModel); else setPreferred3DModel(m.id); setAutoModelSelect(false); }} className={`flex items-center justify-between p-2.5 rounded-xl cursor-pointer hover:bg-gray-50 ${(!autoModelSelect && ((modelPreferenceTab === 'image' && preferredImageModel === m.id) || (modelPreferenceTab === 'video' && preferredVideoModel === m.id) || (modelPreferenceTab === '3d' && preferred3DModel === m.id))) ? 'bg-blue-50' : ''}`}>
                                                         <div className="text-sm font-medium">{m.name}</div>
                                                         {(!autoModelSelect && ((modelPreferenceTab === 'image' && preferredImageModel === m.id) || (modelPreferenceTab === 'video' && preferredVideoModel === m.id) || (modelPreferenceTab === '3d' && preferred3DModel === m.id))) && <Check size={14} className="text-blue-500" />}
                                                     </div>
@@ -470,6 +498,25 @@ export const InputArea: React.FC<InputAreaProps> = ({
                     </div>
                 </div>
             </div>
+
+            {/* Hidden file input for selecting files */}
+            <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                    if (e.target.files) {
+                        Array.from(e.target.files).forEach((f: File) => {
+                            insertInputFile(f);
+                        });
+                    }
+                    if (fileInputRef.current) {
+                        fileInputRef.current.value = '';
+                    }
+                }}
+            />
         </div>
     );
 };

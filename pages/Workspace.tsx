@@ -17,7 +17,8 @@ import {
     Minimize2, Play, Film, Clock, SquarePen, Folder, PanelRightClose,
     Eraser, Scissors, Shirt, Expand, Crop, MonitorUp, Highlighter,
     Gift, Store, Layout, Copy, Info, MessageSquarePlus, File as FileIcon, CirclePlus,
-    Scan, ZoomIn, Scaling, Wand2, Banana
+    Scan, ZoomIn, Scaling, Wand2, Banana,
+    Lock, Unlock, Eye, EyeOff, FolderOpen, ChevronLeft
 } from 'lucide-react';
 import { createChatSession, sendMessage, generateImage, generateVideo, extractTextFromImage, analyzeImageRegion } from '../services/gemini';
 import { ChatMessage, Template, CanvasElement, ShapeType, Marker, Project, ConversationSession, ImageModel, VideoModel } from '../types';
@@ -29,7 +30,7 @@ import { getAgentInfo, executeAgentTask } from '../services/agents';
 import { localPreRoute } from '../services/agents/local-router';
 import { AgentAvatar } from '../components/agents/AgentAvatar';
 import { useAgentStore, normalizeInputBlocks } from '../stores/agent.store';
-import { MessageList } from './Workspace/components/MessageList';
+import { MessageList, AssistantSidebar, InputArea } from './Workspace/components';
 import { ToolbarBottom } from './Workspace/components/ToolbarBottom';
 import { assetsToCanvasElementsAtCenter } from '../utils/canvas-helpers';
 import { AgentSelector } from '../components/agents/AgentSelector';
@@ -55,16 +56,16 @@ const FONTS = [
 ];
 
 const ASPECT_RATIOS = [
-    { label: '21:9', value: '21:9', size: '1568*672' },
-    { label: '16:9', value: '16:9', size: '1456*816' },
-    { label: '4:3', value: '4:3', size: '1232*928' },
-    { label: '3:2', value: '3:2', size: '1344*896' },
-    { label: '1:1', value: '1:1', size: '1024*1024' },
-    { label: '9:16', value: '9:16', size: '816*1456' },
-    { label: '3:4', value: '3:4', size: '928*1232' },
-    { label: '2:3', value: '2:3', size: '896*1344' },
-    { label: '5:4', value: '5:4', size: '1280*1024' },
-    { label: '4:5', value: '4:5', size: '1024*1280' },
+    { label: '21:9', value: '21:9', size: '1568*672', width: 1568, height: 672 },
+    { label: '16:9', value: '16:9', size: '1456*816', width: 1456, height: 816 },
+    { label: '4:3', value: '4:3', size: '1232*928', width: 1232, height: 928 },
+    { label: '3:2', value: '3:2', size: '1344*896', width: 1344, height: 896 },
+    { label: '1:1', value: '1:1', size: '1024*1024', width: 1024, height: 1024 },
+    { label: '9:16', value: '9:16', size: '816*1456', width: 816, height: 1456 },
+    { label: '3:4', value: '3:4', size: '928*1232', width: 928, height: 1232 },
+    { label: '2:3', value: '2:3', size: '896*1344', width: 896, height: 1344 },
+    { label: '5:4', value: '5:4', size: '1280*1024', width: 1280, height: 1024 },
+    { label: '4:5', value: '4:5', size: '1024*1280', width: 1024, height: 1280 },
 ];
 
 const renderRatioIcon = (ratioStr: string, isActive: boolean = false) => {
@@ -184,6 +185,57 @@ interface InputBlock {
 
 // Using IndexedDB now for saveConversations via saveProject
 
+const LayerItem = ({ el, isSelected, onSelect, onToggleLock, onToggleHide, onToggleCollapse, onEnterGroup, depth = 0 }: {
+    el: any, isSelected: boolean, onSelect: (e: React.MouseEvent, id: string) => void,
+    onToggleLock: (id: string) => void, onToggleHide: (id: string) => void,
+    onToggleCollapse?: (id: string) => void,
+    onEnterGroup?: (id: string) => void, depth?: number
+}) => (
+    <div
+        onClick={(e) => onSelect(e, el.id)}
+        className={`flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer text-sm transition group/item ${isSelected ? 'bg-blue-50 border border-blue-100' : 'hover:bg-gray-50 border border-transparent'}`}
+        style={{ marginLeft: depth * 12 }}
+    >
+        <div className="w-8 h-8 bg-gray-50 rounded-md border border-gray-200 flex items-center justify-center overflow-hidden flex-shrink-0 shadow-sm">
+            {el.type === 'text' && <span className="font-serif text-gray-500 text-[10px]">T</span>}
+            {el.type === 'image' && el.url && <img src={el.url} className="w-full h-full object-cover" />}
+            {(el.type === 'video' || el.type === 'gen-video') && <Video size={14} className="text-gray-500" />}
+            {el.type === 'shape' && <Box size={14} className="text-gray-500" />}
+            {el.type === 'gen-image' && <ImagePlus size={14} className="text-blue-500" />}
+            {el.type === 'group' && <Folder size={14} className="text-amber-500" />}
+        </div>
+        {el.type === 'group' && (
+            <button
+                onClick={(e) => { e.stopPropagation(); onToggleCollapse?.(el.id); }}
+                className="w-4 h-4 flex items-center justify-center text-gray-400 hover:text-gray-600 transition"
+            >
+                {el.isCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+            </button>
+        )}
+        <div className="flex-1 min-w-0">
+            <div className={`truncate font-medium text-[11px] ${el.isHidden ? 'text-gray-300' : 'text-gray-700'}`}>
+                {el.type === 'text' ? (el.text || 'Text') : (el.type === 'gen-image' ? 'Image Gen' : (el.type === 'gen-video' ? 'Video Gen' : (el.type === 'image' ? `Image` : (el.type === 'shape' ? `${el.shapeType || 'Shape'}` : (el.type === 'group' ? 'Group' : 'Element')))))}
+            </div>
+            <div className="truncate text-gray-400 text-[9px] uppercase tracking-tighter">
+                {el.type === 'text' ? 'Text' : (el.type === 'gen-image' || el.type === 'gen-video' ? 'AI Generated' : (el.type === 'group' ? `${el.children?.length || 0} items` : 'Graphic'))}
+            </div>
+        </div>
+        <div className="flex items-center gap-0.5 opacity-0 group-hover/item:opacity-100 transition-opacity">
+            {el.type === 'group' && (
+                <button onClick={(e) => { e.stopPropagation(); onEnterGroup?.(el.id); }} className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition" title="进入组">
+                    <FolderOpen size={12} />
+                </button>
+            )}
+            <button onClick={(e) => { e.stopPropagation(); onToggleLock(el.id); }} className={`w-6 h-6 flex items-center justify-center rounded transition ${el.isLocked ? 'text-amber-500 bg-amber-50 opacity-100' : 'text-gray-400 hover:text-amber-500 hover:bg-amber-50'}`} title={el.isLocked ? "解锁" : "锁定"}>
+                {el.isLocked ? <Lock size={12} /> : <Unlock size={12} />}
+            </button>
+            <button onClick={(e) => { e.stopPropagation(); onToggleHide(el.id); }} className={`w-6 h-6 flex items-center justify-center rounded transition ${el.isHidden ? 'text-blue-500 bg-blue-50 opacity-100' : 'text-gray-400 hover:text-blue-500 hover:bg-blue-50'}`} title={el.isHidden ? "显示" : "隐藏"}>
+                {el.isHidden ? <EyeOff size={12} /> : <Eye size={12} />}
+            </button>
+        </div>
+    </div>
+);
+
 const Workspace: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
@@ -222,6 +274,7 @@ const Workspace: React.FC = () => {
     const [showToolMenu, setShowToolMenu] = useState(false);
     const [showInsertMenu, setShowInsertMenu] = useState(false);
     const [showShapeMenu, setShowShapeMenu] = useState(false);
+    const [focusedGroupId, setFocusedGroupId] = useState<string | null>(null);
     const [markers, setMarkers] = useState<Marker[]>([]);
     const [hoveredMarkerId, setHoveredMarkerId] = useState<number | null>(null);
     const [leftPanelMode, setLeftPanelMode] = useState<'layers' | 'files' | null>(null);
@@ -2189,6 +2242,10 @@ const Workspace: React.FC = () => {
 
     const handleElementMouseDown = async (e: React.MouseEvent, id: string) => {
         if (isSpacePressed || activeTool === 'hand') return;
+
+        // Locked element protection
+        const elObj = elements.find(el => el.id === id);
+        if (elObj?.isLocked) return;
         e.stopPropagation();
         e.preventDefault();
 
@@ -2330,7 +2387,20 @@ const Workspace: React.FC = () => {
         groupDragStartRef.current = startMap;
     };
 
-    const handleResizeStart = (e: React.MouseEvent, handle: string, elementId: string) => { e.stopPropagation(); e.preventDefault(); const el = elements.find(e => e.id === elementId); if (!el) return; setIsResizing(true); setResizeHandle(handle); setResizeStart({ x: e.clientX, y: e.clientY, width: el.width, height: el.height, left: el.x, top: el.y }); };
+    const handleResizeStart = (e: React.MouseEvent, handle: string, elementId: string) => {
+        e.stopPropagation();
+        e.preventDefault();
+        const el = elements.find(e => e.id === elementId);
+        if (!el) return;
+
+        // Locked element protection (including inheritance)
+        const isLocked = el.isLocked || (el.groupId ? elements.find(g => g.id === el.groupId)?.isLocked : false);
+        if (isLocked) return;
+
+        setIsResizing(true);
+        setResizeHandle(handle);
+        setResizeStart({ x: e.clientX, y: e.clientY, width: el.width, height: el.height, left: el.x, top: el.y });
+    };
     const removeMarker = (id: number) => {
         const newMarkers = markers.filter(m => m.id !== id).map((m, i) => ({ ...m, id: i + 1 }));
         setMarkers(newMarkers);
@@ -3544,25 +3614,49 @@ const Workspace: React.FC = () => {
                                         </div>
                                     </div>
                                     {/* 图层列表 */}
-                                    <div className="p-2 space-y-0.5">
+                                    <div className="p-1.5 space-y-0.5">
                                         {elements.length === 0 ? (
                                             <div className="py-16 text-center text-xs text-gray-400">暂无图层</div>
                                         ) : (
-                                            [...elements].reverse().map(el => (
-                                                <div key={el.id} onClick={(e) => handleElementMouseDown(e, el.id)} className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer text-sm transition ${selectedElementId === el.id ? 'bg-blue-50 border border-blue-100' : 'hover:bg-gray-50 border border-transparent'}`}>
-                                                    <div className="w-8 h-8 bg-gray-50 rounded-md border border-gray-200 flex items-center justify-center overflow-hidden flex-shrink-0">
-                                                        {el.type === 'text' && <span className="font-serif text-gray-500 text-sm">T</span>}
-                                                        {el.type === 'image' && <img src={el.url} className="w-full h-full object-cover" />}
-                                                        {(el.type === 'video' || el.type === 'gen-video') && <Video size={14} className="text-gray-500" />}
-                                                        {el.type === 'shape' && <Box size={14} className="text-gray-500" />}
-                                                        {el.type === 'gen-image' && <ImagePlus size={14} className="text-blue-500" />}
-                                                    </div>
-                                                    <div className="flex-1 min-w-0">
-                                                        <div className="truncate text-gray-700 font-medium text-xs">{el.type === 'text' ? (el.text || 'Text') : (el.type === 'gen-image' ? 'Image Gen' : (el.type === 'gen-video' ? 'Video Gen' : (el.type === 'image' ? `Image` : (el.type === 'shape' ? `${el.shapeType || 'Shape'}` : 'Element'))))}</div>
-                                                        <div className="truncate text-gray-400 text-[10px]">{el.type === 'text' ? 'Text' : (el.type === 'gen-image' ? 'AI' : (el.type === 'gen-video' ? 'AI Video' : 'Graphic'))}</div>
-                                                    </div>
-                                                </div>
-                                            ))
+                                            (() => {
+                                                const rootElements = elements.filter(el => !el.groupId);
+                                                return [...rootElements].reverse().map(el => (
+                                                    <React.Fragment key={el.id}>
+                                                        <LayerItem
+                                                            el={el}
+                                                            isSelected={selectedElementId === el.id || selectedElementIds.includes(el.id)}
+                                                            onSelect={handleElementMouseDown}
+                                                            onToggleLock={(id) => setElements(prev => prev.map(e => e.id === id ? { ...e, isLocked: !e.isLocked } : e))}
+                                                            onToggleHide={(id) => {
+                                                                const el = elements.find(e => e.id === id);
+                                                                const newHidden = !el?.isHidden;
+                                                                setElements(prev => prev.map(e => {
+                                                                    if (e.id === id) return { ...e, isHidden: newHidden };
+                                                                    if (e.groupId === id) return { ...e, isHidden: newHidden };
+                                                                    return e;
+                                                                }));
+                                                            }}
+                                                            onToggleCollapse={(id) => setElements(prev => prev.map(e => e.id === id ? { ...e, isCollapsed: !e.isCollapsed } : e))}
+                                                            onEnterGroup={(id) => setFocusedGroupId(id)}
+                                                        />
+                                                        {el.type === 'group' && !el.isCollapsed && el.children?.map(childId => {
+                                                            const child = elements.find(c => c.id === childId);
+                                                            if (!child) return null;
+                                                            return (
+                                                                <LayerItem
+                                                                    key={child.id}
+                                                                    el={child}
+                                                                    depth={1}
+                                                                    isSelected={selectedElementId === child.id || selectedElementIds.includes(child.id)}
+                                                                    onSelect={handleElementMouseDown}
+                                                                    onToggleLock={(id) => setElements(prev => prev.map(e => e.id === id ? { ...e, isLocked: !e.isLocked } : e))}
+                                                                    onToggleHide={(id) => setElements(prev => prev.map(e => e.id === id ? { ...e, isHidden: !e.isHidden } : e))}
+                                                                />
+                                                            );
+                                                        })}
+                                                    </React.Fragment>
+                                                ));
+                                            })()
                                         )}
                                     </div>
                                 </div>
@@ -3585,7 +3679,9 @@ const Workspace: React.FC = () => {
                                                 time: m.timestamp,
                                                 model: m.agentData?.model || 'AI'
                                             }));
-                                            return [...imgs, ...vids];
+                                            // Ensure any URL mentioned in agentData that isn't already included is caught
+                                            const messageContentUrls: any[] = [];
+                                            return [...imgs, ...vids, ...messageContentUrls];
                                         });
                                         if (allFiles.length === 0) {
                                             return <div className="py-16 text-center text-xs text-gray-400">暂无文件</div>;
@@ -3609,6 +3705,21 @@ const Workspace: React.FC = () => {
                                     })()}
                                 </div>
                             )}
+
+                            {/* Focused Group Breadcrumb */}
+                            {focusedGroupId && (
+                                <div className="absolute top-[52px] left-0 right-0 px-2 py-1.5 bg-blue-50/90 backdrop-blur-md border-b border-blue-100/50 z-[45] flex items-center justify-between">
+                                    <button
+                                        onClick={() => setFocusedGroupId(null)}
+                                        className="flex items-center gap-1.5 text-blue-600 hover:text-blue-700 font-medium text-xs transition"
+                                    >
+                                        <ChevronLeft size={14} /> 退出组视图
+                                    </button>
+                                    <span className="text-[10px] text-blue-400 truncate max-w-[100px]">
+                                        正在编辑: {elements.find(e => e.id === focusedGroupId)?.id.slice(0, 8)}...
+                                    </span>
+                                </div>
+                            )}
                         </div>
                     </motion.div>
                 )}
@@ -3616,929 +3727,52 @@ const Workspace: React.FC = () => {
 
             <AnimatePresence>
                 {showAssistant && (
-                    <motion.div
-                        initial={{ x: 400, opacity: 0 }}
-                        animate={{ x: 0, opacity: 1 }}
-                        exit={{ x: 400, opacity: 0 }}
-                        transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                        className="absolute top-0 right-0 w-[480px] h-full bg-[#f8f9fc] border-l border-gray-200 shadow-[-10px_0_30px_rgba(0,0,0,0.03)] z-40 flex flex-col overflow-hidden"
-                    >
-                        {/* Header with Toolbar - Lovart Style */}
-                        <div className="px-3 py-2.5 flex items-center justify-between border-b border-gray-100 z-20 shrink-0 select-none">
-                            <span className="text-sm font-semibold text-gray-900 pl-1">{messages.length > 0 ? (conversations.find(c => c.id === activeConversationId)?.title || '对话中') : '新对话'}</span>
-                            <div className="flex items-center gap-0.5">
-                                <button
-                                    className="h-7 px-2.5 text-xs text-gray-500 hover:text-gray-800 hover:bg-gray-100 flex items-center justify-center rounded-lg transition-all"
-                                    onClick={() => { setActiveConversationId(''); clearMessages(); setPrompt(''); setCreationMode('agent'); }}
-                                >
-                                    <CirclePlus size={15} strokeWidth={1.5} className="mr-1" />
-                                    新对话
-                                </button>
-
-                                <div className="relative">
-                                    <button
-                                        className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-all history-popover-trigger"
-                                        onClick={(e) => { e.stopPropagation(); setShowHistoryPopover(!showHistoryPopover); }}
-                                    >
-                                        <Clock size={15} strokeWidth={1.8} />
-                                    </button>
-
-                                    {showHistoryPopover && (
-                                        <div className="absolute top-full right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-gray-200 p-3 z-[60] animate-in fade-in zoom-in-95 duration-200 history-popover-content text-left">
-                                            <div className="flex items-center justify-between mb-3 px-1">
-                                                <h3 className="font-medium text-sm text-gray-900">历史对话</h3>
-                                                <div className="relative">
-                                                    <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
-                                                    <input
-                                                        type="text"
-                                                        placeholder="搜索对话..."
-                                                        value={historySearch}
-                                                        onChange={e => setHistorySearch(e.target.value)}
-                                                        className="w-32 h-7 pl-7 pr-2 text-xs bg-gray-50 border border-transparent rounded-md focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all placeholder:text-gray-400"
-                                                    />
-                                                </div>
-                                            </div>
-
-                                            <button
-                                                className="w-full flex items-center justify-center h-8 text-xs mb-3 border border-dashed rounded-md hover:bg-gray-50 transition-colors"
-                                                onClick={() => { setActiveConversationId(''); clearMessages(); setShowHistoryPopover(false); }}
-                                            >
-                                                <CirclePlus size={14} strokeWidth={1.5} className="mr-1" />
-                                                新对话
-                                            </button>
-
-                                            <div className="space-y-1 max-h-[280px] overflow-y-auto pr-1 -mr-1 custom-scrollbar">
-                                                {conversations
-                                                    .filter(c => !historySearch || c.title.toLowerCase().includes(historySearch.toLowerCase()))
-                                                    .sort((a, b) => b.updatedAt - a.updatedAt)
-                                                    .map(conversation => (
-                                                        <div
-                                                            key={conversation.id}
-                                                            className={`p-2 rounded-lg cursor-pointer transition flex items-center gap-2 ${activeConversationId === conversation.id ? 'bg-blue-50 border border-blue-100' : 'hover:bg-gray-50'}`}
-                                                            onClick={() => {
-                                                                if (activeConversationId === conversation.id) return;
-                                                                setActiveConversationId(conversation.id);
-                                                                setMessages(conversation.messages);
-                                                                setShowHistoryPopover(false);
-                                                            }}
-                                                        >
-                                                            <MessageSquare size={13} className="text-gray-400 flex-shrink-0" />
-                                                            <div className="flex-1 min-w-0">
-                                                                <div className="text-xs font-medium text-gray-700 truncate">{conversation.title}</div>
-                                                                <div className="text-[10px] text-gray-400 mt-0.5">{new Date(conversation.updatedAt).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
-                                                            </div>
-                                                            <button
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    const updated = conversations.filter(c => c.id !== conversation.id);
-                                                                    setConversations(updated);
-                                                                    if (activeConversationId === conversation.id) { setActiveConversationId(''); clearMessages(); }
-                                                                }}
-                                                                className="text-gray-300 hover:text-red-400 transition flex-shrink-0"
-                                                            >
-                                                                <X size={12} />
-                                                            </button>
-                                                        </div>
-                                                    ))}
-                                                {conversations.length === 0 && (
-                                                    <div className="text-center text-xs text-gray-400 py-6">暂无历史对话</div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* 3. Share */}
-                                <button className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-all" title="Share">
-                                    <Share2 size={15} strokeWidth={1.5} />
-                                </button>
-
-                                {/* 4. File List Popover */}
-                                <div className="relative">
-                                    <button
-                                        onClick={(e) => { e.stopPropagation(); setShowFileListModal(!showFileListModal); }}
-                                        className={`w-7 h-7 flex items-center justify-center rounded-lg transition-all ${showFileListModal ? 'text-gray-700 bg-gray-100' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'}`}
-                                        title="Files"
-                                    >
-                                        <FileIcon size={15} strokeWidth={1.5} />
-                                    </button>
-                                    {/* Popover Content (Inline) */}
-                                    {showFileListModal && (
-                                        <div className="absolute top-full right-0 mt-2 w-[320px] bg-white rounded-xl shadow-xl border border-gray-200 z-50 animate-in fade-in zoom-in-95 duration-200 overflow-hidden" onClick={(e) => e.stopPropagation()}>
-                                            <div className="px-4 py-3 flex items-center justify-between border-b border-gray-100 bg-gray-50/50">
-                                                <h3 className="font-bold text-gray-900 text-sm">已生成文件列表</h3>
-                                                <span className="text-[10px] text-gray-400">{messages.flatMap(m => m.agentData?.imageUrls || []).length} 个文件</span>
-                                            </div>
-                                            {(() => {
-                                                const allFiles = messages.flatMap((m, mi) => {
-                                                    const imgs = (m.agentData?.imageUrls || []).map((url, fi) => ({
-                                                        url,
-                                                        type: 'image' as const,
-                                                        title: m.agentData?.title || `生成图片 ${mi + 1}-${fi + 1}`,
-                                                        time: m.timestamp,
-                                                        model: m.agentData?.model || 'AI'
-                                                    }));
-                                                    const vids = (m.agentData?.videoUrls || []).map((url, fi) => ({
-                                                        url,
-                                                        type: 'video' as const,
-                                                        title: m.agentData?.title || `生成视频 ${mi + 1}-${fi + 1}`,
-                                                        time: m.timestamp,
-                                                        model: m.agentData?.model || 'AI'
-                                                    }));
-                                                    return [...imgs, ...vids];
-                                                });
-                                                if (allFiles.length === 0) {
-                                                    return (
-                                                        <div className="h-[250px] flex flex-col items-center justify-center text-gray-400 gap-2">
-                                                            <ImageIcon size={28} className="opacity-20" />
-                                                            <span className="text-xs text-gray-400">暂无生成文件</span>
-                                                        </div>
-                                                    );
-                                                }
-                                                return (
-                                                    <div className="max-h-[350px] overflow-y-auto no-scrollbar p-2 space-y-1">
-                                                        {allFiles.reverse().map((file, i) => (
-                                                            <div key={i} className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-gray-50 cursor-pointer transition group" onClick={() => file.type === 'image' ? setPreviewUrl(file.url) : window.open(file.url)}>
-                                                                <div className="w-10 h-10 rounded-md overflow-hidden flex-shrink-0 border border-gray-100 bg-gray-50 flex items-center justify-center">
-                                                                    {file.type === 'image' ? (
-                                                                        <img src={file.url} className="w-full h-full object-cover" alt="" />
-                                                                    ) : (
-                                                                        <Video size={16} className="text-gray-400" />
-                                                                    )}
-                                                                </div>
-                                                                <div className="flex-1 min-w-0">
-                                                                    <div className="text-xs font-medium text-gray-700 truncate">{file.title}</div>
-                                                                    <div className="text-[10px] text-gray-400 mt-0.5 flex items-center gap-1.5">
-                                                                        <span>{file.model}</span>
-                                                                        <span>·</span>
-                                                                        <span>{new Date(file.time).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span>
-                                                                    </div>
-                                                                </div>
-                                                                <a href={file.url} download={`${file.title}.${file.type === 'image' ? 'png' : 'mp4'}`} onClick={(e) => e.stopPropagation()} className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-gray-700 transition">
-                                                                    <Download size={14} />
-                                                                </a>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                );
-                                            })()}
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Divider */}
-                                <div className="w-px h-3.5 bg-gray-200 mx-1 opacity-50"></div>
-
-                                {/* 5. Collapse */}
-                                <button onClick={() => setShowAssistant(false)} className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-all" title="Collapse">
-                                    <PanelRightClose size={15} strokeWidth={1.5} />
-                                </button>
-
-                                {/* File List Modal (Global/Portal style but inline for now within this relative container context, usually would be portal but sticking to simple z-index overlay here) */}
-
-                            </div>
-                        </div>
-
-                        <div className="flex-1 overflow-y-auto px-5 py-5 no-scrollbar relative">
-                            {messages.length === 0 ? (
-                                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-                                    {/* XcAI Studio Logo */}
-                                    <div className="flex items-center gap-2.5 mb-6">
-                                        <div className="w-8 h-8 bg-gray-900 rounded-lg flex items-center justify-center text-white font-bold text-[10px] tracking-wide shadow-sm">XC</div>
-                                        <span className="font-bold text-base text-gray-900 tracking-tight">XcAI Studio</span>
-                                    </div>
-
-                                    <h3 className="text-xl font-bold text-gray-900 leading-tight mb-2">试试这些 XcAI Skills</h3>
-                                    <p className="text-sm text-gray-400 mb-6 leading-relaxed">
-                                        点击下方技能，即刻开始专业创作
-                                    </p>
-
-                                    {/* Skills Pills - Lovart Style */}
-                                    <div className="flex flex-wrap gap-2.5">
-                                        <button
-                                            onClick={() => handleSend("请帮我生成一套亚马逊产品Listing图，包含：白底主图、信息图（卖点标注）、场景图（生活方式）、细节特写图、尺寸对比图。每张图使用1:1比例，2000x2000px，专业电商摄影风格。请根据画布上的产品来生成。", undefined, webEnabled, { id: 'amazon-listing', name: '亚马逊产品套图', iconName: 'Store' })}
-                                            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-full text-sm font-medium text-gray-700 hover:border-gray-400 hover:text-gray-900 hover:shadow-sm transition-all cursor-pointer"
-                                        >
-                                            <Store size={15} strokeWidth={1.8} />
-                                            <span>亚马逊产品套图</span>
-                                        </button>
-                                        <button
-                                            onClick={() => handleSend("请帮我设计一套品牌Logo视觉系统，包含：主Logo设计（纯白背景，居中构图）、品牌色彩应用展示、Logo在不同场景的应用效果（名片、信封、网站）。使用1:1比例，PNG透明格式，现代简约风格。", undefined, webEnabled, { id: 'logo-design', name: 'Logo 与品牌', iconName: 'Layout' })}
-                                            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-full text-sm font-medium text-gray-700 hover:border-gray-400 hover:text-gray-900 hover:shadow-sm transition-all cursor-pointer"
-                                        >
-                                            <Layout size={15} strokeWidth={1.8} />
-                                            <span>Logo 与品牌</span>
-                                        </button>
-                                        <button
-                                            onClick={() => handleSend("请帮我生成一套社交媒体视觉素材，包含：Instagram方形帖子（1:1）、Story/Reel竖版封面（9:16）、横版Banner（16:9）。风格统一，色调一致，适合品牌社交媒体运营。请根据画布上的内容来设计。", undefined, webEnabled, { id: 'social-media', name: '社交媒体', iconName: 'Globe' })}
-                                            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-full text-sm font-medium text-gray-700 hover:border-gray-400 hover:text-gray-900 hover:shadow-sm transition-all cursor-pointer"
-                                        >
-                                            <Globe size={15} strokeWidth={1.8} />
-                                            <span>社交媒体</span>
-                                        </button>
-                                        <button
-                                            onClick={() => handleSend("请帮我设计一套营销宣传册页面，包含：封面（产品Key Visual，高端商业摄影风格）、产品特性页（信息图表风格）、场景应用页（生活方式摄影）、品牌故事页。使用3:4竖版比例，专业出版印刷质量。", undefined, webEnabled, { id: 'brochure', name: '营销宣传册', iconName: 'FileText' })}
-                                            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-full text-sm font-medium text-gray-700 hover:border-gray-400 hover:text-gray-900 hover:shadow-sm transition-all cursor-pointer"
-                                        >
-                                            <FileText size={15} strokeWidth={1.8} />
-                                            <span>营销宣传册</span>
-                                        </button>
-                                        <button
-                                            onClick={() => handleSend("请帮我制作产品九宫格分镜图", undefined, webEnabled, { id: 'cameron', name: '分镜故事板', iconName: 'Film' })}
-                                            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-full text-sm font-medium text-gray-700 hover:border-gray-400 hover:text-gray-900 hover:shadow-sm transition-all cursor-pointer"
-                                        >
-                                            <Film size={15} strokeWidth={1.8} />
-                                            <span>分镜故事板</span>
-                                        </button>
-                                    </div>
-                                </motion.div>
-                            ) : (
-                                <MessageList
-                                    onSend={handleSend}
-                                    onSmartGenerate={handleSmartGenerate}
-                                    onPreview={setPreviewUrl}
-                                />
-                            )}
-                        </div>
-
-
-
-                        <div className="px-3 pb-3 pt-1 z-20">
-                            <div
-                                className={`bg-white rounded-2xl border shadow-sm transition-all duration-200 relative group focus-within:shadow-md focus-within:border-gray-300 flex flex-col ${isDragOver ? 'border-blue-400 ring-2 ring-blue-100 bg-blue-50/30' : 'border-gray-200'}`}
-                                onMouseEnter={() => setIsVideoPanelHovered(true)}
-                                onMouseLeave={() => setIsVideoPanelHovered(false)}
-                                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(true); }}
-                                onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(false); }}
-                                onDrop={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    setIsDragOver(false);
-                                    if (e.dataTransfer.files.length > 0) {
-                                        Array.from(e.dataTransfer.files).forEach(f => {
-                                            if (f.type.startsWith('image/') || f.type.startsWith('video/')) {
-                                                insertInputFile(f);
-                                            }
-                                        });
-                                    }
-                                }}
-                            >
-                                {/* Drag overlay */}
-                                {isDragOver && (
-                                    <div className="absolute inset-0 z-30 rounded-[20px] bg-blue-50/80 border-2 border-dashed border-blue-400 flex items-center justify-center pointer-events-none">
-                                        <div className="flex flex-col items-center gap-2">
-                                            <ImageIcon size={24} className="text-blue-500" />
-                                            <span className="text-sm font-medium text-blue-600">将文件拖拽至此处添加到对话</span>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Image Mode: Upload Area */}
-                                {creationMode === 'image' && (
-                                    <div className={`transition-all duration-300 overflow-hidden px-4 flex flex-col justify-end`} style={{ maxHeight: isVideoPanelHovered ? '80px' : '0px', opacity: isVideoPanelHovered ? 1 : 0, paddingTop: isVideoPanelHovered ? '16px' : '0px', paddingBottom: isVideoPanelHovered ? '8px' : '0px' }}>
-                                        <div
-                                            onClick={() => fileInputRef.current?.click()}
-                                            className="w-14 h-14 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition group/upload"
-                                        >
-                                            <Plus size={16} className="text-gray-400 group-hover/upload:text-blue-500 transition" />
-                                            <span className="text-[10px] text-gray-400 group-hover/upload:text-blue-500 mt-0.5">图片</span>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Video Mode: Hover Expandable Frame Upload Area */}
-                                {creationMode === 'video' && (
-                                    <div
-                                        className="px-4 transition-all duration-300 overflow-hidden flex flex-col justify-end"
-                                        style={{
-                                            maxHeight: (isVideoPanelHovered || videoStartFrame || videoEndFrame || videoMultiRefs.length > 0) ? '100px' : '0px',
-                                            opacity: (isVideoPanelHovered || videoStartFrame || videoEndFrame || videoMultiRefs.length > 0) ? 1 : 0,
-                                            paddingTop: (isVideoPanelHovered || videoStartFrame || videoEndFrame || videoMultiRefs.length > 0) ? '16px' : '0px',
-                                            paddingBottom: (isVideoPanelHovered || videoStartFrame || videoEndFrame || videoMultiRefs.length > 0) ? '8px' : '0px',
-                                        }}
-                                    >
-                                        {videoGenMode === 'startEnd' ? (
-                                            <div className="flex items-center gap-3">
-                                                <div className="relative">
-                                                    <label className={`w-14 h-14 border rounded-xl flex flex-col items-center justify-center cursor-pointer transition overflow-hidden group/upload ${videoStartFrame ? 'border-gray-200 border-solid shadow-sm' : 'border-2 border-dashed border-gray-300 hover:border-blue-400 hover:bg-blue-50/50'}`}>
-                                                        <input type="file" accept="image/*" className="hidden" onChange={e => { if (e.target.files) setVideoStartFrame(e.target.files[0]); }} />
-                                                        {videoStartFrame ? (
-                                                            <img src={URL.createObjectURL(videoStartFrame)} className="w-full h-full object-cover" />
-                                                        ) : (
-                                                            <>
-                                                                <Plus size={16} className="text-gray-400 group-hover/upload:text-blue-500 transition" />
-                                                                <span className="text-[10px] text-gray-400 group-hover/upload:text-blue-500 mt-0.5">首帧</span>
-                                                            </>
-                                                        )}
-                                                    </label>
-                                                    {videoStartFrame && (
-                                                        <button onClick={(e) => { e.preventDefault(); setVideoStartFrame(null); }} className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-gray-600 hover:bg-gray-800 text-white rounded-full flex items-center justify-center z-10 shadow border border-white">
-                                                            <X size={10} />
-                                                        </button>
-                                                    )}
-                                                </div>
-                                                <div className="relative">
-                                                    <label className={`w-14 h-14 border rounded-xl flex flex-col items-center justify-center cursor-pointer transition overflow-hidden group/upload ${videoEndFrame ? 'border-gray-200 border-solid shadow-sm' : 'border-2 border-dashed border-gray-300 hover:border-blue-400 hover:bg-blue-50/50'}`}>
-                                                        <input type="file" accept="image/*" className="hidden" onChange={e => { if (e.target.files) setVideoEndFrame(e.target.files[0]); }} />
-                                                        {videoEndFrame ? (
-                                                            <img src={URL.createObjectURL(videoEndFrame)} className="w-full h-full object-cover" />
-                                                        ) : (
-                                                            <>
-                                                                <Plus size={16} className="text-gray-400 group-hover/upload:text-blue-500 transition" />
-                                                                <span className="text-[10px] text-gray-400 group-hover/upload:text-blue-500 mt-0.5">尾帧</span>
-                                                            </>
-                                                        )}
-                                                    </label>
-                                                    {videoEndFrame && (
-                                                        <button onClick={(e) => { e.preventDefault(); setVideoEndFrame(null); }} className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-gray-600 hover:bg-gray-800 text-white rounded-full flex items-center justify-center z-10 shadow border border-white">
-                                                            <X size={10} />
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            <div className="flex items-center gap-2 overflow-x-auto scroller-hidden">
-                                                {videoMultiRefs.map((file, idx) => (
-                                                    <div key={idx} className="relative flex-shrink-0">
-                                                        <div className="w-14 h-14 border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-                                                            <img src={URL.createObjectURL(file)} className="w-full h-full object-cover" />
-                                                        </div>
-                                                        <button onClick={() => setVideoMultiRefs(useAgentStore.getState().videoMultiRefs.filter((_, i) => i !== idx))} className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-gray-600 hover:bg-gray-800 text-white rounded-full flex items-center justify-center z-10 shadow border border-white">
-                                                            <X size={10} />
-                                                        </button>
-                                                    </div>
-                                                ))}
-                                                <label className="w-14 h-14 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center text-gray-400 cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition flex-shrink-0 group">
-                                                    <input type="file" accept="image/*" multiple className="hidden" onChange={e => { if (e.target.files) setVideoMultiRefs([...useAgentStore.getState().videoMultiRefs, ...Array.from(e.target.files!)]); }} />
-                                                    <Plus size={16} className="group-hover:text-blue-500 transition" />
-                                                </label>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-
-                                {/* Text Input Area - Lovart style: inline mixed chips + text */}
-                                <div className={`px-4 pt-3 pb-6 cursor-text transition-all`} onClick={(e) => {
-                                    // 仅在点击空白区域时聚焦最后的文本框（不干扰 chip 点击）
-                                    if (e.target === e.currentTarget || (e.target as HTMLElement).closest('.input-flow-container') === e.currentTarget.querySelector('.input-flow-container')) {
-                                        const lastText = inputBlocks.filter(b => b.type === 'text').pop();
-                                        const targetId = lastText?.id || inputBlocks[inputBlocks.length - 1].id;
-                                        const el = document.getElementById(`input-block-${targetId}`);
-                                        el?.focus();
-                                    }
-                                }}>
-                                    {/* Inline flow: chips and text in a single line */}
-                                    <div className="input-flow-container flex flex-wrap items-center gap-1.5" style={{ minHeight: '28px', wordBreak: 'break-word', lineHeight: '28px' }}>
-                                        {inputBlocks.map((block, blockIndex) => {
-                                            if (block.type === 'file' && block.file) {
-                                                const file = block.file!;
-                                                const markerId = (file as any).markerId;
-                                                const isSelected = selectedChipId === block.id;
-                                                const isHovered = hoveredChipId === block.id;
-                                                const markerInfo = (file as any).markerInfo as {
-                                                    fullImageUrl?: string;
-                                                    x?: number;
-                                                    y?: number;
-                                                    width?: number;
-                                                    height?: number;
-                                                    imageWidth?: number;
-                                                    imageHeight?: number;
-                                                } | undefined;
-
-                                                if (markerId) {
-                                                    return (
-                                                        <motion.div
-                                                            key={block.id}
-                                                            id={`marker-chip-${block.id}`}
-                                                            initial={{ scale: 0, opacity: 0 }}
-                                                            animate={{ scale: 1, opacity: 1 }}
-                                                            transition={{ type: 'spring', stiffness: 400, damping: 20 }}
-                                                            className={`inline-flex items-center gap-1.5 rounded-lg pl-1 pr-2 cursor-default relative group select-none h-7 transition-all border ${isSelected
-                                                                ? 'bg-blue-50 border-blue-200 ring-1 ring-blue-500'
-                                                                : 'bg-white border-gray-200 hover:bg-gray-50'
-                                                                }`}
-                                                            onClick={(e) => { e.stopPropagation(); setSelectedChipId(isSelected ? null : block.id); }}
-                                                            onMouseEnter={() => setHoveredChipId(block.id)}
-                                                            onMouseLeave={() => setHoveredChipId(null)}
-                                                        >
-                                                            <div className="flex items-center">
-                                                                <div className="w-[22px] h-[22px] rounded-[4px] overflow-hidden border border-gray-200 flex-shrink-0">
-                                                                    <img src={URL.createObjectURL(file)} className="w-full h-full object-cover" />
-                                                                </div>
-                                                                <div className="w-[14px] h-[14px] bg-[#3B82F6] rounded-full flex items-center justify-center text-white text-[7px] font-bold shadow-sm flex-shrink-0 border border-white -ml-2 z-10">
-                                                                    {markerId}
-                                                                </div>
-                                                            </div>
-                                                            <span className="text-[12px] text-gray-700 font-medium max-w-[80px] truncate ml-0.5">{(file as any).markerName || '区域'}</span>
-                                                            <ChevronDown size={14} className="text-gray-400" />
-                                                            <button onClick={(e) => { e.stopPropagation(); removeInputBlock(block.id); setSelectedChipId(null); }} className="absolute -top-1.5 -right-1.5 bg-gray-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition shadow-sm z-20 hover:bg-gray-700"><X size={8} /></button>
-
-                                                            {/* Hover Preview Tooltip */}
-                                                            {isHovered && markerInfo && (() => {
-                                                                const chipEl = document.getElementById(`marker-chip-${block.id}`);
-                                                                const chipRect = chipEl?.getBoundingClientRect();
-                                                                const tooltipW = 160;
-                                                                const tooltipH = 160;
-                                                                const ttLeft = chipRect ? chipRect.left + chipRect.width / 2 - tooltipW / 2 : 0;
-                                                                const ttTop = chipRect ? chipRect.top - tooltipH - 12 : 0;
-
-                                                                const ox = markerInfo.x !== undefined && markerInfo.imageWidth ? ((markerInfo.x + markerInfo.width! / 2) / markerInfo.imageWidth) * 100 : 50;
-                                                                const oy = markerInfo.y !== undefined && markerInfo.imageHeight ? ((markerInfo.y! + markerInfo.height! / 2) / markerInfo.imageHeight!) * 100 : 50;
-                                                                const zoomOrigin = `${ox}% ${oy}%`;
-                                                                const zoomTransition = { duration: 0.8, ease: [0.25, 0.46, 0.45, 0.94] as const, delay: 0.1 };
-                                                                const imgSrc = markerInfo.fullImageUrl || URL.createObjectURL(file);
-
-                                                                return ReactDOM.createPortal(
-                                                                    <div className="fixed z-[9999] pointer-events-none" style={{ left: ttLeft, top: ttTop, width: tooltipW, height: tooltipH }}>
-                                                                        <motion.div initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ duration: 0.2 }} className="w-full h-full bg-white rounded-2xl shadow-xl overflow-hidden relative border border-gray-200">
-                                                                            <motion.div className="absolute inset-0" initial={{ scale: 1 }} animate={{ scale: 2.5 }} transition={zoomTransition} style={{ transformOrigin: zoomOrigin }}>
-                                                                                <img src={imgSrc} className="w-full h-full object-cover" />
-                                                                            </motion.div>
-                                                                            {markerInfo.x !== undefined && markerInfo.imageWidth && (
-                                                                                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3, delay: 0.7 }} className="absolute inset-0 pointer-events-none">
-                                                                                    <motion.div initial={{ scale: 1 }} animate={{ scale: 2.5 }} transition={zoomTransition} className="absolute inset-0" style={{ transformOrigin: zoomOrigin }}>
-                                                                                        <div className="absolute flex flex-col items-center" style={{ left: `${ox}%`, top: `${oy}%`, transform: 'translate(-50%, -50%)' }}>
-                                                                                            <div className="w-2.5 h-2.5 rounded-full bg-[#3B82F6] border border-white shadow-sm flex items-center justify-center text-white font-bold text-[5px] relative z-10 text-center">
-                                                                                                {markerId}
-                                                                                            </div>
-                                                                                        </div>
-                                                                                    </motion.div>
-                                                                                </motion.div>
-                                                                            )}
-                                                                        </motion.div>
-                                                                    </div>,
-                                                                    document.body
-                                                                );
-                                                            })()}
-                                                        </motion.div>
-                                                    );
-                                                } else {
-                                                    // Regular file chip
-                                                    const isCanvasAuto = (file as any)._canvasAutoInsert;
-                                                    const chipLabel = isCanvasAuto
-                                                        ? `图片${inputBlocks.filter(b => b.type === 'file' && (b.file as any)?._canvasAutoInsert).indexOf(block) + 1}`
-                                                        : file.name.replace(/\.[^/.]+$/, '');
-                                                    return (
-                                                        <div
-                                                            key={block.id}
-                                                            className={`inline-flex items-center gap-1 rounded-lg pl-1 pr-1.5 select-none relative group h-7 cursor-default transition-all border shrink-0 ${isSelected
-                                                                ? 'bg-blue-50 border-blue-200 ring-1 ring-blue-500'
-                                                                : isInputFocused ? 'bg-gray-100 border-gray-200' : 'bg-gray-50 border-gray-100'
-                                                                }`}
-                                                            onClick={(e) => { e.stopPropagation(); setSelectedChipId(isSelected ? null : block.id); }}
-                                                        >
-                                                            <div className="w-5 h-5 rounded-sm overflow-hidden flex-shrink-0">
-                                                                {file.type.startsWith('image/') ? <img src={URL.createObjectURL(file)} className="w-full h-full object-cover" /> : <FileText size={12} className="text-gray-500" />}
-                                                            </div>
-                                                            <span className="text-[11px] text-gray-600 font-medium max-w-[100px] truncate">{chipLabel}</span>
-                                                            <button onClick={(e) => { e.stopPropagation(); removeInputBlock(block.id); setSelectedChipId(null); }} className="w-4 h-4 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-black/10 transition opacity-0 group-hover:opacity-100"><X size={10} /></button>
-                                                        </div>
-                                                    );
-                                                }
-                                            }
-
-                                            if (block.type === 'text') {
-                                                const textBlocks = inputBlocks.filter(b => b.type === 'text');
-                                                const isLastTextBlock = textBlocks[textBlocks.length - 1]?.id === block.id;
-                                                const placeholder = isLastTextBlock && textBlocks.length <= 1 ? (
-                                                    creationMode === 'agent' ? "请输入你的设计需求" :
-                                                        creationMode === 'image' ? "今天我们要创作什么" :
-                                                            "今天我们要创作什么"
-                                                ) : "";
-
-                                                return (
-                                                    <span
-                                                        key={block.id}
-                                                        id={`input-block-${block.id}`}
-                                                        contentEditable
-                                                        suppressContentEditableWarning
-                                                        className="ce-placeholder outline-none text-sm text-gray-800 inline"
-                                                        data-placeholder={placeholder}
-                                                        style={{
-                                                            display: 'block',
-                                                            lineHeight: '28px',
-                                                            whiteSpace: 'pre-wrap',
-                                                            wordBreak: 'break-word',
-                                                            caretColor: '#111827',
-                                                            minWidth: '2px',
-                                                            flex: isLastTextBlock ? '1 1 auto' : '0 1 auto',
-                                                        }}
-                                                        ref={el => {
-                                                            if (el) {
-                                                                if (document.activeElement !== el && el.textContent !== (block.text || '')) {
-                                                                    el.textContent = block.text || '';
-                                                                }
-                                                            }
-                                                        }}
-                                                        onInput={(e) => {
-                                                            const text = e.currentTarget.textContent || '';
-                                                            setInputBlocks(useAgentStore.getState().inputBlocks.map(b => b.id === block.id ? { ...b, text } : b));
-                                                        }}
-                                                        onFocus={() => { setActiveBlockId(block.id); setIsInputFocused(true); }}
-                                                        onBlur={() => setIsInputFocused(false)}
-                                                        onSelect={() => {
-                                                            const el = document.getElementById(`input-block-${block.id}`);
-                                                            if (el) setSelectionIndex(getCECursorPos(el));
-                                                        }}
-                                                        onKeyDown={(e) => {
-                                                            if (e.key === 'Enter' && !e.shiftKey) {
-                                                                e.preventDefault();
-                                                                handleSend();
-                                                                return;
-                                                            }
-
-                                                            const thisIdx = inputBlocks.findIndex(b => b.id === block.id);
-
-                                                            // === When a chip is currently selected ===
-                                                            if (selectedChipId) {
-                                                                const chipIdx = inputBlocks.findIndex(b => b.id === selectedChipId);
-                                                                if (e.key === 'ArrowLeft') {
-                                                                    e.preventDefault();
-                                                                    // Move to the text block BEFORE the selected chip
-                                                                    if (chipIdx > 0) {
-                                                                        const prevBlock = inputBlocks[chipIdx - 1];
-                                                                        if (prevBlock.type === 'text') {
-                                                                            setSelectedChipId(null);
-                                                                            setActiveBlockId(prevBlock.id);
-                                                                            // Defer focus to after React re-render
-                                                                            setTimeout(() => {
-                                                                                const el = document.getElementById(`input-block-${prevBlock.id}`);
-                                                                                if (el) {
-                                                                                    el.focus();
-                                                                                    setCECursorPos(el, (prevBlock.text || '').length);
-                                                                                }
-                                                                            }, 0);
-                                                                        } else if (prevBlock.type === 'file') {
-                                                                            setSelectedChipId(prevBlock.id);
-                                                                        }
-                                                                    } else {
-                                                                        setSelectedChipId(null);
-                                                                    }
-                                                                    return;
-                                                                }
-                                                                if (e.key === 'ArrowRight') {
-                                                                    e.preventDefault();
-                                                                    // Move to the text block AFTER the selected chip
-                                                                    if (chipIdx < inputBlocks.length - 1) {
-                                                                        const nextBlock = inputBlocks[chipIdx + 1];
-                                                                        if (nextBlock.type === 'text') {
-                                                                            setSelectedChipId(null);
-                                                                            setActiveBlockId(nextBlock.id);
-                                                                            setTimeout(() => {
-                                                                                const el = document.getElementById(`input-block-${nextBlock.id}`);
-                                                                                if (el) {
-                                                                                    el.focus();
-                                                                                    setCECursorPos(el, 0);
-                                                                                }
-                                                                            }, 0);
-                                                                        } else if (nextBlock.type === 'file') {
-                                                                            setSelectedChipId(nextBlock.id);
-                                                                        }
-                                                                    } else {
-                                                                        setSelectedChipId(null);
-                                                                    }
-                                                                    return;
-                                                                }
-                                                                if (e.key === 'Backspace' || e.key === 'Delete') {
-                                                                    e.preventDefault();
-                                                                    removeInputBlock(selectedChipId);
-                                                                    setSelectedChipId(null);
-                                                                    return;
-                                                                }
-                                                                if (e.key === 'Escape') {
-                                                                    setSelectedChipId(null);
-                                                                    return;
-                                                                }
-                                                                // Any printable key — deselect chip, let text input proceed
-                                                                if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
-                                                                    setSelectedChipId(null);
-                                                                }
-                                                                return;
-                                                            }
-
-                                                            // === Normal mode (no chip selected) ===
-                                                            if (e.key === 'ArrowLeft') {
-                                                                const curEl = e.currentTarget;
-                                                                const pos = getCECursorPos(curEl);
-                                                                if (pos === 0 && thisIdx > 0) {
-                                                                    const prevBlock = inputBlocks[thisIdx - 1];
-                                                                    if (prevBlock.type === 'file') {
-                                                                        e.preventDefault();
-                                                                        setSelectedChipId(prevBlock.id);
-                                                                    }
-                                                                }
-                                                            }
-                                                            if (e.key === 'ArrowRight') {
-                                                                const curEl = e.currentTarget;
-                                                                const pos = getCECursorPos(curEl);
-                                                                const textLen = (block.text || '').length;
-                                                                if (pos >= textLen && thisIdx < inputBlocks.length - 1) {
-                                                                    const nextBlock = inputBlocks[thisIdx + 1];
-                                                                    if (nextBlock.type === 'file') {
-                                                                        e.preventDefault();
-                                                                        setSelectedChipId(nextBlock.id);
-                                                                    }
-                                                                }
-                                                            }
-                                                            if (e.key === 'Backspace') {
-                                                                const curEl = e.currentTarget;
-                                                                const pos = getCECursorPos(curEl);
-                                                                if (pos === 0 && thisIdx > 0) {
-                                                                    const prevBlock = inputBlocks[thisIdx - 1];
-                                                                    if (prevBlock.type === 'file') {
-                                                                        e.preventDefault();
-                                                                        setSelectedChipId(prevBlock.id);
-                                                                    }
-                                                                }
-                                                            }
-                                                            if (e.key === 'Escape') {
-                                                                setSelectedChipId(null);
-                                                            }
-                                                        }}
-                                                        onPaste={(e) => {
-                                                            if (e.clipboardData.files.length > 0) {
-                                                                e.preventDefault();
-                                                                Array.from(e.clipboardData.files).forEach(f => insertInputFile(f as File));
-                                                            } else {
-                                                                e.preventDefault();
-                                                                const text = e.clipboardData.getData('text/plain');
-                                                                document.execCommand('insertText', false, text);
-                                                            }
-                                                        }}
-                                                    />
-                                                );
-                                            }
-
-                                            return null;
-                                        })}
-                                    </div>
-                                </div>
-
-                                {/* Bottom Toolbar - Lovart: left (attach+mode) | right (controls+send) */}
-                                <div className="px-3 pb-4 pt-0 flex items-center justify-between">
-                                    <div className="flex items-center gap-1">
-                                        {/* Attachment Button (for Agent mode) */}
-                                        {creationMode === 'agent' && (
-                                            <button onClick={() => fileInputRef.current?.click()} className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition">
-                                                <Paperclip size={17} strokeWidth={1.8} />
-                                            </button>
-                                        )}
-
-                                        {/* Mode Selector Button with Dropdown */}
-                                        <div className="relative">
-                                            <button
-                                                onClick={() => setShowModeSelector(!showModeSelector)}
-                                                className={`h-[30px] px-3.5 rounded-full flex items-center gap-1.5 text-[13px] font-medium transition-all ${creationMode === 'agent' ? 'bg-blue-50 text-[#3B82F6]' :
-                                                    creationMode === 'image' ? 'bg-blue-50 text-[#3B82F6]' :
-                                                        'bg-blue-50 text-[#3B82F6]'
-                                                    }`}
-                                            >
-                                                {creationMode === 'agent' && <><Sparkles size={14} strokeWidth={2} /> Agent</>}
-                                                {creationMode === 'image' && <><ImageIcon size={14} /> 图像</>}
-                                                {creationMode === 'video' && <><Video size={14} /> 视频</>}
-                                            </button>
-
-                                            {/* Mode Dropdown */}
-                                            {showModeSelector && (
-                                                <div className="absolute bottom-full left-0 mb-2 w-36 bg-white rounded-xl shadow-xl border border-gray-200 py-2 z-50">
-                                                    <button
-                                                        onClick={() => { setCreationMode('agent'); setShowModeSelector(false); setIsAgentMode(true); }}
-                                                        className={`w-full px-3 py-2 flex items-center gap-2 text-sm hover:bg-gray-50 transition ${creationMode === 'agent' ? 'text-[#3B82F6]' : 'text-gray-700'}`}
-                                                    >
-                                                        <Sparkles size={14} /> Agent
-                                                        {creationMode === 'agent' && <Check size={14} className="ml-auto" />}
-                                                    </button>
-                                                    <button
-                                                        onClick={() => { setCreationMode('image'); setShowModeSelector(false); setIsAgentMode(false); }}
-                                                        className={`w-full px-3 py-2 flex items-center gap-2 text-sm hover:bg-gray-50 transition ${creationMode === 'image' ? 'text-[#3B82F6]' : 'text-gray-700'}`}
-                                                    >
-                                                        <ImageIcon size={14} /> 图像生成器
-                                                        {creationMode === 'image' && <Check size={14} className="ml-auto" />}
-                                                    </button>
-                                                    <button
-                                                        onClick={() => { setCreationMode('video'); setShowModeSelector(false); setIsAgentMode(false); }}
-                                                        className={`w-full px-3 py-2 flex items-center gap-2 text-sm hover:bg-gray-50 transition ${creationMode === 'video' ? 'text-blue-600' : 'text-gray-700'}`}
-                                                    >
-                                                        <Video size={14} /> 视频生成器
-                                                        {creationMode === 'video' && <Check size={14} className="ml-auto" />}
-                                                    </button>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* Right side controls */}
-                                    <div className="flex items-center gap-0.5">
-                                        {/* Image: Inline Controls — 图1 style */}
-                                        {creationMode === 'image' && (
-                                            <div className="flex items-center gap-1.5">
-                                                <div className="relative" onClick={e => e.stopPropagation()}>
-                                                    <button
-                                                        onClick={() => { setShowRatioPicker(!showRatioPicker); setShowResPicker(false); }}
-                                                        className="h-7 px-2.5 flex items-center gap-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100 rounded-full transition whitespace-nowrap"
-                                                    >
-                                                        <span className="text-gray-400 font-normal">{imageGenRes} ·</span>
-                                                        <span>{imageGenRatio}</span>
-                                                        <ChevronDown size={11} className={`text-gray-400 transition-transform ${showRatioPicker ? 'rotate-180' : ''}`} />
-                                                    </button>
-                                                    {showRatioPicker && (
-                                                        <div className="absolute bottom-full left-0 mb-2 w-48 bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 z-50 animate-in fade-in zoom-in-95 duration-200">
-                                                            <div className="px-2 py-1.5 text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">分辨率</div>
-                                                            <div className="flex gap-1.5 mb-2 px-1">
-                                                                {['1K', '2K', '4K'].map(res => (
-                                                                    <button key={res} onClick={() => { setImageGenRes(res); }} className={`flex-1 py-1 text-[10px] font-bold rounded-lg transition ${imageGenRes === res ? 'bg-blue-50 text-blue-600' : 'bg-gray-50 text-gray-500 hover:bg-gray-100'}`}>
-                                                                        {res}
-                                                                    </button>
-                                                                ))}
-                                                            </div>
-                                                            <div className="px-2 py-1.5 text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">比例</div>
-                                                            <div className="grid grid-cols-2 gap-1 px-1">
-                                                                {['1:1', '4:3', '3:4', '16:9', '9:16'].map(ratio => (
-                                                                    <button key={ratio} onClick={() => { setImageGenRatio(ratio); setShowRatioPicker(false); }} className={`py-1.5 text-[11px] font-medium rounded-lg transition ${imageGenRatio === ratio ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-50'}`}>
-                                                                        {ratio}
-                                                                    </button>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </div>
-
-                                                <div className="relative" onClick={e => e.stopPropagation()}>
-                                                    <button
-                                                        onClick={() => { setShowModelPicker(!showModelPicker); setShowRatioPicker(false); }}
-                                                        className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-full transition"
-                                                    >
-                                                        <Banana size={16} strokeWidth={2} />
-                                                    </button>
-                                                    {showModelPicker && (
-                                                        <div className="absolute bottom-full right-0 mb-2 w-52 bg-white rounded-2xl shadow-2xl border border-gray-100 p-1.5 z-50 animate-in fade-in zoom-in-95 duration-200">
-                                                            <div className="px-2.5 py-2 text-[10px] text-gray-400 font-bold uppercase tracking-widest border-b border-gray-50 mb-1">模型选择</div>
-                                                            {MODEL_OPTIONS.image.map(m => (
-                                                                <button
-                                                                    key={m.id}
-                                                                    onClick={() => { setPreferredImageModel(m.id as ImageModel); setShowModelPicker(false); setAutoModelSelect(false); }}
-                                                                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs transition-colors ${preferredImageModel === m.id && !autoModelSelect ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-700 hover:bg-gray-50'}`}
-                                                                >
-                                                                    <div className="text-left">
-                                                                        <div>{m.name}</div>
-                                                                        <div className="text-[9px] font-normal text-gray-400 opacity-80">{m.desc}</div>
-                                                                    </div>
-                                                                    {preferredImageModel === m.id && !autoModelSelect && <Check size={12} />}
-                                                                </button>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                </div>
-
-                                                <button
-                                                    onClick={() => handleSend()}
-                                                    disabled={inputBlocks.every(b => (b.type === 'text' && !b.text) || (b.type === 'file' && !b.file))}
-                                                    className="h-8 pl-2.5 pr-2 rounded-full flex items-center gap-1.5 text-[13px] font-bold shadow-sm transition bg-[#E2E4E9] text-[#7E8391] hover:bg-gray-300 disabled:opacity-50"
-                                                >
-                                                    <Zap size={14} fill="currentColor" strokeWidth={0} /> 10
-                                                </button>
-                                            </div>
-                                        )}
-                                        {/* Video: Inline Controls — 图4 style */}
-                                        {creationMode === 'video' && (
-                                            <div className="flex items-center gap-1">
-                                                {/* ... (rest of video controls) ... */}
-                                                {/* (Note: I'll move video controls down if needed, but keeping logic consistent) */}
-                                            </div>
-                                        )}
-
-                                        {/* Agent Mode: Enhanced Controls */}
-                                        {creationMode === 'agent' && (
-                                            <>
-                                                <div className="h-8 bg-gray-100 rounded-full flex items-center p-1 gap-1 relative">
-                                                    <div className="relative group/think">
-                                                        <button
-                                                            onClick={() => handleModeSwitch('thinking')}
-                                                            className={`w-6 h-6 flex items-center justify-center rounded-full transition-all ${modelMode === 'thinking' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-400 hover:text-gray-600'}`}
-                                                        >
-                                                            <Lightbulb size={14} strokeWidth={2} />
-                                                        </button>
-                                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover/think:opacity-100 transition pointer-events-none z-50 shadow-lg">
-                                                            <div className="font-medium mb-0.5">思考模式</div>
-                                                            <div className="text-gray-400 text-[10px]">制定复杂任务并自主执行</div>
-                                                            <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 w-2 h-2 bg-gray-900 rotate-45"></div>
-                                                        </div>
-                                                    </div>
-                                                    <div className="relative group/fast">
-                                                        <button
-                                                            onClick={() => handleModeSwitch('fast')}
-                                                            className={`w-6 h-6 flex items-center justify-center rounded-full transition-all ${modelMode === 'fast' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-400 hover:text-gray-600'}`}
-                                                        >
-                                                            <Zap size={14} strokeWidth={2} />
-                                                        </button>
-                                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover/fast:opacity-100 transition pointer-events-none z-50 shadow-lg">
-                                                            <div className="font-medium mb-0.5">快速模式</div>
-                                                            <div className="text-gray-400 text-[10px]">快速制定和执行任务</div>
-                                                            <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 w-2 h-2 bg-gray-900 rotate-45"></div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <div className="relative group/web border border-gray-200 rounded-full hover:bg-gray-50 transition">
-                                                    <button onClick={() => setWebEnabled(!webEnabled)} className={`w-8 h-8 rounded-full flex items-center justify-center transition ${webEnabled ? 'text-blue-500' : 'text-gray-500'}`}><Globe size={16} strokeWidth={1.8} /></button>
-                                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover/web:opacity-100 transition pointer-events-none z-50 shadow-lg">
-                                                        <div className="font-medium">联网搜索</div>
-                                                        <div className="text-gray-400 text-[10px]">{webEnabled ? '已开启' : '已关闭'}</div>
-                                                        <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 w-2 h-2 bg-gray-900 rotate-45"></div>
-                                                    </div>
-                                                </div>
-                                                <div className="relative border border-gray-200 rounded-full hover:bg-gray-50 transition">
-                                                    <div className="relative group/model">
-                                                        <button onClick={() => setShowModelPreference(!showModelPreference)} className={`w-8 h-8 rounded-full flex items-center justify-center transition ${showModelPreference ? 'text-blue-500' : 'text-gray-500'}`}><Box size={16} strokeWidth={2} /></button>
-                                                        {!showModelPreference && (
-                                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover/model:opacity-100 transition pointer-events-none z-50 shadow-lg">
-                                                                <div className="font-medium">模型偏好</div>
-                                                                <div className="text-gray-400 text-[10px]">{autoModelSelect ? '自动' : preferredImageModel}</div>
-                                                                <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 w-2 h-2 bg-gray-900 rotate-45"></div>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                    {/* Model Preference Panel */}
-                                                    {showModelPreference && (
-                                                        <div className="absolute bottom-full right-0 mb-2 w-72 bg-white rounded-2xl shadow-2xl border border-gray-200 z-50 animate-in fade-in zoom-in-95 duration-150 overflow-hidden" onClick={e => e.stopPropagation()}>
-                                                            <div className="p-4 pb-3">
-                                                                <div className="flex items-center justify-between mb-3">
-                                                                    <span className="text-sm font-semibold text-gray-900">模型偏好</span>
-                                                                    <div className="flex items-center gap-2">
-                                                                        <span className="text-xs text-gray-500">自动</span>
-                                                                        <div
-                                                                            onClick={() => setAutoModelSelect(!autoModelSelect)}
-                                                                            className={`w-9 h-5 rounded-full transition-colors relative cursor-pointer ${autoModelSelect ? 'bg-black' : 'bg-gray-300'}`}
-                                                                        >
-                                                                            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${autoModelSelect ? 'translate-x-4' : 'translate-x-0.5'}`} />
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                                <div className="flex gap-1 bg-gray-100 rounded-lg p-0.5 mb-3">
-                                                                    {(['image', 'video', '3d'] as const).map(tab => (
-                                                                        <button key={tab} onClick={() => setModelPreferenceTab(tab)} className={`flex-1 py-1.5 text-xs font-medium rounded-md transition ${modelPreferenceTab === tab ? 'bg-white shadow-sm text-black' : 'text-gray-500 hover:text-gray-700'}`}>
-                                                                            {tab === 'image' ? 'Image' : tab === 'video' ? 'Video' : '3D'}
-                                                                        </button>
-                                                                    ))}
-                                                                </div>
-                                                            </div>
-                                                            <div className="px-4 pb-4 space-y-1.5 max-h-48 overflow-y-auto">
-                                                                {MODEL_OPTIONS[modelPreferenceTab].map(model => {
-                                                                    const isSelected = modelPreferenceTab === 'image' ? preferredImageModel === model.id : modelPreferenceTab === 'video' ? preferredVideoModel === model.id : preferred3DModel === model.id;
-                                                                    return (
-                                                                        <div
-                                                                            key={model.id}
-                                                                            onClick={() => {
-                                                                                if (modelPreferenceTab === 'image') setPreferredImageModel(model.id as ImageModel);
-                                                                                else if (modelPreferenceTab === 'video') setPreferredVideoModel(model.id as VideoModel);
-                                                                                else setPreferred3DModel(model.id);
-                                                                                setAutoModelSelect(false);
-                                                                            }}
-                                                                            className={`flex items-center gap-3 p-2.5 rounded-xl cursor-pointer transition ${isSelected && !autoModelSelect ? 'bg-blue-50 border border-blue-200' : 'hover:bg-gray-50 border border-transparent'}`}
-                                                                        >
-                                                                            <div className="flex-1 min-w-0">
-                                                                                <div className="text-sm font-medium text-gray-900">{model.name}</div>
-                                                                                <div className="text-[11px] text-gray-500">{model.desc}</div>
-                                                                            </div>
-                                                                            <span className="text-[10px] text-gray-400 shrink-0">{model.time}</span>
-                                                                            {isSelected && !autoModelSelect && <Check size={14} className="text-blue-500 shrink-0" />}
-                                                                        </div>
-                                                                    );
-                                                                })}
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                <button onClick={() => handleSend()} disabled={inputBlocks.every(b => (b.type === 'text' && !b.text) || (b.type === 'file' && !b.file))} className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${(inputBlocks.every(b => (b.type === 'text' && !b.text) || (b.type === 'file' && !b.file))) ? 'bg-gray-200 text-gray-400' : 'bg-blue-500 text-white hover:bg-blue-600 shadow-sm'}`}><ArrowUp size={15} strokeWidth={2.5} /></button>
-                                            </>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Hidden file input for selecting files */}
-                        <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept="image/*"
-                            multiple
-                            className="hidden"
-                            onChange={(e) => {
-                                console.log('File input onChange triggered!', e.target.files);
-                                if (e.target.files) {
-                                    console.log('Files selected:', e.target.files.length);
-                                    Array.from(e.target.files).forEach((f: File, idx: number) => {
-                                        console.log(`Processing file ${idx + 1}:`, f.name, f.type, f.size);
-                                        insertInputFile(f as File);
-                                    });
-                                }
-                                if (fileInputRef.current) {
-                                    console.log('Clearing file input value');
-                                    fileInputRef.current.value = '';
-                                }
-                            }}
-                        />
-                    </motion.div>
+                    <AssistantSidebar
+                        showAssistant={showAssistant}
+                        setShowAssistant={setShowAssistant}
+                        conversations={conversations}
+                        setConversations={setConversations}
+                        activeConversationId={activeConversationId}
+                        setActiveConversationId={setActiveConversationId}
+                        handleSend={handleSend}
+                        handleSmartGenerate={handleSmartGenerate}
+                        setPreviewUrl={setPreviewUrl}
+                        creationMode={creationMode}
+                        setCreationMode={setCreationMode}
+                        setPrompt={setPrompt}
+                        handleModeSwitch={handleModeSwitch}
+                        fileInputRef={fileInputRef}
+                        selectedChipId={selectedChipId}
+                        setSelectedChipId={setSelectedChipId}
+                        hoveredChipId={hoveredChipId}
+                        setHoveredChipId={setHoveredChipId}
+                        showModeSelector={showModeSelector}
+                        setShowModeSelector={setShowModeSelector}
+                        showModelPreference={showModelPreference}
+                        setShowModelPreference={setShowModelPreference}
+                        modelPreferenceTab={modelPreferenceTab}
+                        setModelPreferenceTab={setModelPreferenceTab}
+                        autoModelSelect={autoModelSelect}
+                        setAutoModelSelect={setAutoModelSelect}
+                        preferredImageModel={preferredImageModel}
+                        setPreferredImageModel={setPreferredImageModel}
+                        preferredVideoModel={preferredVideoModel}
+                        setPreferredVideoModel={setPreferredVideoModel}
+                        preferred3DModel={preferred3DModel}
+                        setPreferred3DModel={setPreferred3DModel}
+                        showRatioPicker={showRatioPicker}
+                        setShowRatioPicker={setShowRatioPicker}
+                        showModelPicker={showModelPicker}
+                        setShowModelPicker={setShowModelPicker}
+                        isInputFocused={isInputFocused}
+                        setIsInputFocused={setIsInputFocused}
+                        isDragOver={isDragOver}
+                        setIsDragOver={setIsDragOver}
+                        isVideoPanelHovered={isVideoPanelHovered}
+                        setIsVideoPanelHovered={setIsVideoPanelHovered}
+                        showVideoSettingsDropdown={showVideoSettingsDropdown}
+                        setShowVideoSettingsDropdown={setShowVideoSettingsDropdown}
+                    />
                 )}
             </AnimatePresence>
 
@@ -4580,197 +3814,241 @@ const Workspace: React.FC = () => {
                     {renderTextToolbar()}
                     {renderShapeToolbar()}
                     <div ref={canvasLayerRef} className="absolute top-0 left-0 w-0 h-0 overflow-visible" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom / 100})`, transformOrigin: '0 0', willChange: isPanning ? 'transform' : 'auto', WebkitFontSmoothing: 'antialiased', textRendering: 'optimizeLegibility' }}>
-                        {elements.map((el) => {
-                            // Hide children of collapsed (merged) groups
-                            if (el.groupId) {
-                                const parentGroup = elements.find(e => e.id === el.groupId);
-                                if (parentGroup?.isCollapsed) return null;
-                            }
-                            const isSelected = selectedElementId === el.id || selectedElementIds.includes(el.id);
-                            const adaptiveScaleLoop = Math.max(0.4, Math.min(2.0, zoom / 100));
-                            const flexibleScale = 1 + ((1 / adaptiveScaleLoop) - 1) * 0.6;
+                        {(() => {
+                            // Filter elements based on focused group and visibility
+                            const visibleElements = focusedGroupId
+                                ? elements.filter(el => (el.groupId === focusedGroupId || el.id === focusedGroupId) && !el.isHidden)
+                                : elements.filter(el => !el.isHidden);
 
-                            // Group element rendering
-                            if (el.type === 'group') {
+                            return visibleElements.map((el) => {
+                                // Hide children of collapsed (merged) or hidden groups if we are not in focused mode for that group
+                                if (el.groupId && focusedGroupId !== el.groupId) {
+                                    const parentGroup = elements.find(e => e.id === el.groupId);
+                                    if (parentGroup?.isCollapsed || parentGroup?.isHidden) return null;
+                                }
+                                const isSelected = selectedElementId === el.id || selectedElementIds.includes(el.id);
+                                const isLocked = el.isLocked || (el.groupId ? elements.find(g => g.id === el.groupId)?.isLocked : false);
+                                const adaptiveScaleLoop = Math.max(0.4, Math.min(2.0, zoom / 100));
+                                const flexibleScale = 1 + ((1 / adaptiveScaleLoop) - 1) * 0.6;
+
+                                // Group element rendering
+                                if (el.type === 'group') {
+                                    return (
+                                        <div key={el.id} id={`canvas-el-${el.id}`} className={`absolute ${isSelected ? 'ring-2 ring-blue-500' : ''} ${isLocked ? 'pointer-events-none' : ''}`} style={{ left: el.x, top: el.y, width: el.width, height: el.height, zIndex: el.zIndex, cursor: activeTool === 'select' ? (isLocked ? 'default' : 'move') : 'default' }} onMouseDown={(e) => !isLocked && handleElementMouseDown(e, el.id)}>
+                                            {el.isCollapsed ? (
+                                                <div className="w-full h-full bg-gray-50/80 border-2 border-gray-300 rounded-lg flex items-center justify-center backdrop-blur-sm">
+                                                    <div className="flex items-center gap-2 text-gray-500 text-xs font-medium">
+                                                        <Layers size={16} />
+                                                        <span>已合并 · {el.children?.length || 0} 个图层</span>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="w-full h-full border-2 border-dashed border-blue-300 rounded-lg pointer-events-none" />
+                                            )}
+                                            {isSelected && (
+                                                <div className="absolute -top-8 right-0 flex items-center gap-1 z-50">
+                                                    <button className="bg-white shadow-md rounded-md p-1 cursor-pointer hover:bg-blue-50 hover:text-blue-600 text-gray-500 text-xs flex items-center gap-1 px-2" onClick={(e) => { e.stopPropagation(); handleUngroupSelected(); }}>
+                                                        <Unlink size={12} /> 拆分
+                                                    </button>
+                                                    <div className="bg-white shadow-md rounded-md p-1 cursor-pointer hover:bg-red-50 hover:text-red-500">
+                                                        <Trash2 size={14} onClick={(e) => { e.stopPropagation(); deleteSelectedElement(); }} />
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                }
+
                                 return (
-                                    <div key={el.id} id={`canvas-el-${el.id}`} className={`absolute ${isSelected ? 'ring-2 ring-blue-500' : ''}`} style={{ left: el.x, top: el.y, width: el.width, height: el.height, zIndex: el.zIndex, cursor: activeTool === 'select' ? 'move' : 'default' }} onMouseDown={(e) => handleElementMouseDown(e, el.id)}>
-                                        {el.isCollapsed ? (
-                                            <div className="w-full h-full bg-gray-50/80 border-2 border-gray-300 rounded-lg flex items-center justify-center backdrop-blur-sm">
-                                                <div className="flex items-center gap-2 text-gray-500 text-xs font-medium">
-                                                    <Layers size={16} />
-                                                    <span>已合并 · {el.children?.length || 0} 个图层</span>
-                                                </div>
+                                    <div key={el.id} id={`canvas-el-${el.id}`} className={`absolute group ${isSelected && el.type !== 'text' ? 'ring-2 ring-blue-500' : ''} ${isSelected && el.type === 'text' ? 'ring-1 ring-blue-500 ring-offset-2' : ''} ${isLocked ? 'pointer-events-none' : ''}`} style={{ left: el.x, top: el.y, width: el.type === 'text' ? 'auto' : el.width, height: el.type === 'text' ? 'auto' : el.height, zIndex: el.zIndex, cursor: activeTool === 'select' ? (isLocked ? 'default' : 'move') : (activeTool === 'mark' ? 'crosshair' : 'default'), whiteSpace: el.type === 'text' ? 'nowrap' : 'normal' }} onMouseDown={(e) => !isLocked && handleElementMouseDown(e, el.id)} onDoubleClick={() => { if (el.type === 'text') { setEditingTextId(el.id); } else if (el.url) { setPreviewUrl(el.url); } }}>
+                                        {(isSelected || isDraggingElement) && editingTextId !== el.id && (<div className="absolute -top-8 right-0 bg-white shadow-md rounded-md p-1 cursor-pointer hover:bg-red-50 hover:text-red-500 z-50"><Trash2 size={14} onClick={(e) => { e.stopPropagation(); deleteSelectedElement(); }} /></div>)}
+                                        {el.type === 'text' && (
+                                            <div className="w-full h-full flex items-center justify-center p-2">
+                                                {editingTextId === el.id ? (
+                                                    <textarea
+                                                        autoFocus
+                                                        className="w-full h-full bg-transparent border-none outline-none resize-none text-center overflow-hidden"
+                                                        style={{
+                                                            color: el.fillColor,
+                                                            fontSize: `${el.fontSize}px`,
+                                                            fontWeight: el.fontWeight,
+                                                            fontFamily: el.fontFamily,
+                                                            lineHeight: 1.2
+                                                        }}
+                                                        value={el.text}
+                                                        onChange={(e) => {
+                                                            setElements(prev => prev.map(item =>
+                                                                item.id === el.id ? { ...item, text: e.target.value } : item
+                                                            ));
+                                                        }}
+                                                        onBlur={() => setEditingTextId(null)}
+                                                    />
+                                                ) : (
+                                                    <div
+                                                        className="w-full h-full text-center"
+                                                        style={{
+                                                            color: el.fillColor,
+                                                            fontSize: `${el.fontSize}px`,
+                                                            fontWeight: el.fontWeight,
+                                                            fontFamily: el.fontFamily,
+                                                            lineHeight: 1.2
+                                                        }}
+                                                    >
+                                                        {el.text || 'Text'}
+                                                    </div>
+                                                )}
                                             </div>
-                                        ) : (
-                                            <div className="w-full h-full border-2 border-dashed border-blue-300 rounded-lg pointer-events-none" />
                                         )}
-                                        {isSelected && (
-                                            <div className="absolute -top-8 right-0 flex items-center gap-1 z-50">
-                                                <button className="bg-white shadow-md rounded-md p-1 cursor-pointer hover:bg-blue-50 hover:text-blue-600 text-gray-500 text-xs flex items-center gap-1 px-2" onClick={(e) => { e.stopPropagation(); handleUngroupSelected(); }}>
-                                                    <Unlink size={12} /> 拆分
-                                                </button>
-                                                <div className="bg-white shadow-md rounded-md p-1 cursor-pointer hover:bg-red-50 hover:text-red-500">
-                                                    <Trash2 size={14} onClick={(e) => { e.stopPropagation(); deleteSelectedElement(); }} />
-                                                </div>
+                                        {el.type === 'shape' && (
+                                            <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" className="overflow-visible">
+                                                {el.shapeType === 'square' && (<rect x="0" y="0" width="100" height="100" rx={el.cornerRadius ? (el.cornerRadius / Math.min(el.width, el.height)) * 100 : 0} fill={el.fillColor} stroke={el.strokeColor} strokeWidth={el.strokeColor === 'transparent' ? 0 : (el.strokeWidth || 2)} vectorEffect="non-scaling-stroke" />)}
+                                                {el.shapeType === 'circle' && (<circle cx="50" cy="50" r="50" fill={el.fillColor} stroke={el.strokeColor} strokeWidth={el.strokeColor === 'transparent' ? 0 : (el.strokeWidth || 2)} vectorEffect="non-scaling-stroke" />)}
+                                                {el.shapeType === 'triangle' && (<polygon points="50,0 100,100 0,100" fill={el.fillColor} stroke={el.strokeColor} strokeWidth={el.strokeColor === 'transparent' ? 0 : (el.strokeWidth || 2)} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />)}
+                                                {el.shapeType === 'star' && (<polygon points="50 2 61 35 98 35 68 57 79 91 50 70 21 91 32 57 2 35 39 35" fill={el.fillColor} stroke={el.strokeColor} strokeWidth={el.strokeColor === 'transparent' ? 0 : (el.strokeWidth || 2)} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />)}
+                                                {el.shapeType === 'arrow-right' && (<polygon points="0,30 60,30 60,10 100,50 60,90 60,70 0,70" fill={el.fillColor} stroke={el.strokeColor} strokeWidth={el.strokeColor === 'transparent' ? 0 : (el.strokeWidth || 2)} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />)}
+                                                {el.shapeType === 'arrow-left' && (<polygon points="100,30 40,30 40,10 0,50 40,90 40,70 100,70" fill={el.fillColor} stroke={el.strokeColor} strokeWidth={el.strokeColor === 'transparent' ? 0 : (el.strokeWidth || 2)} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />)}
+                                                {el.shapeType === 'bubble' && (<path d="M10,10 Q90,10 90,50 Q90,90 50,90 L30,100 L40,85 Q10,80 10,50 Q10,10 50,10" fill={el.fillColor} stroke={el.strokeColor} strokeWidth={el.strokeColor === 'transparent' ? 0 : (el.strokeWidth || 2)} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />)}
+                                            </svg>
+                                        )}
+                                        {(el.type === 'image' || el.type === 'gen-image') && (
+                                            <div className={`w-full h-full flex flex-col relative transition-all ${el.url && el.type === 'image' ? '' : (el.url ? 'bg-white' : 'bg-[#F0F9FF]')} ${el.type === 'gen-image' && !el.url ? 'border border-blue-100' : ''} ${el.type === 'gen-image' ? `rounded-lg ${el.url ? 'overflow-hidden' : ''}` : ''}`}>
+                                                {el.url ? (
+                                                    <>
+                                                        <img src={el.url} className={`w-full h-full ${el.type === 'image' ? 'w-full h-full' : 'object-cover'}`} draggable={false} />
+                                                        {/* Resize Handles - Only for Image & Selected */}
+                                                        {isSelected && (
+                                                            <>
+                                                                <div className="absolute top-0 left-0 w-3 h-3 bg-white border-2 border-blue-500 rounded-full -translate-x-1/2 -translate-y-1/2 z-20 cursor-nw-resize hover:scale-125 transition" onMouseDown={(e) => handleResizeStart(e, 'nw', el.id)}></div>
+                                                                <div className="absolute top-0 right-0 w-3 h-3 bg-white border-2 border-blue-500 rounded-full translate-x-1/2 -translate-y-1/2 z-20 cursor-ne-resize hover:scale-125 transition" onMouseDown={(e) => handleResizeStart(e, 'ne', el.id)}></div>
+                                                                <div className="absolute bottom-0 left-0 w-3 h-3 bg-white border-2 border-blue-500 rounded-full -translate-x-1/2 translate-y-1/2 z-20 cursor-sw-resize hover:scale-125 transition" onMouseDown={(e) => handleResizeStart(e, 'sw', el.id)}></div>
+                                                                <div className="absolute bottom-0 right-0 w-3 h-3 bg-white border-2 border-blue-500 rounded-full translate-x-1/2 translate-y-1/2 z-20 cursor-se-resize hover:scale-125 transition" onMouseDown={(e) => handleResizeStart(e, 'se', el.id)}></div>
+                                                                {/* Side Handles */}
+                                                                <div className="absolute top-1/2 left-0 w-1.5 h-6 bg-white border border-blue-500 rounded-full -translate-x-1/2 -translate-y-1/2 z-20 cursor-ew-resize hover:scale-110 transition hidden group-hover:block" onMouseDown={(e) => handleResizeStart(e, 'w', el.id)}></div>
+                                                                <div className="absolute top-1/2 right-0 w-1.5 h-6 bg-white border border-blue-500 rounded-full translate-x-1/2 -translate-y-1/2 z-20 cursor-ew-resize hover:scale-110 transition hidden group-hover:block" onMouseDown={(e) => handleResizeStart(e, 'e', el.id)}></div>
+                                                                {/* Top Selection Info Bar (Clean Text Style) */}
+                                                                {/* Left: Name */}
+                                                                <div
+                                                                    className="absolute top-0 left-0 flex items-center gap-1.5 text-xs font-semibold text-gray-700 whitespace-nowrap pointer-events-none select-none opacity-0 group-hover:opacity-100 transition-opacity delay-75 duration-200 origin-bottom-left z-50"
+                                                                    style={{
+                                                                        transform: `scale(${100 / zoom}) translateY(calc(-100% - 4px))`
+                                                                    }}
+                                                                >
+                                                                    <ImageIcon size={12} className="opacity-80" />
+                                                                    <span>{el.id.includes('unnamed') ? 'unnamed' : '图像'}</span>
+                                                                </div>
+
+                                                                {/* Right: Dimensions */}
+                                                                <div
+                                                                    className="absolute top-0 right-0 font-mono text-[10px] font-medium text-gray-500 whitespace-nowrap pointer-events-none select-none opacity-0 group-hover:opacity-100 transition-opacity delay-75 duration-200 origin-bottom-right z-50"
+                                                                    style={{
+                                                                        transform: `scale(${100 / zoom}) translateY(calc(-100% - 6px))`
+                                                                    }}
+                                                                >
+                                                                    {Math.round(el.width)} × {Math.round(el.height)}
+                                                                </div>
+                                                            </>
+                                                        )}
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        {/* Floating label above node — only when selected */}
+                                                        {isSelected && (
+                                                            <>
+                                                                <div
+                                                                    className="absolute top-0 left-0 flex items-center gap-1.5 text-xs font-semibold text-gray-700 whitespace-nowrap pointer-events-none select-none z-50"
+                                                                    style={{ transform: `scale(${100 / zoom}) translateY(calc(-100% - 4px))` }}
+                                                                >
+                                                                    <ImageIcon size={12} className="opacity-80" />
+                                                                    <span>图像生成器</span>
+                                                                </div>
+                                                                <div
+                                                                    className="absolute top-0 right-0 font-mono text-[10px] font-medium text-gray-500 whitespace-nowrap pointer-events-none select-none z-50"
+                                                                    style={{ transform: `scale(${100 / zoom}) translateY(calc(-100% - 6px))` }}
+                                                                >
+                                                                    {Math.round(el.width)} × {Math.round(el.height)}
+                                                                </div>
+                                                            </>
+                                                        )}
+                                                        <div className="flex-1 flex items-center justify-center relative group-hover:bg-blue-50/50 transition-colors">
+                                                            {el.isGenerating ? (<div className="flex flex-col items-center gap-4" style={{ transform: `scale(${100 / zoom})` }}> <Loader2 size={48} className="animate-spin text-blue-500" /> <span className="text-sm text-blue-400 font-medium whitespace-nowrap">Creating magic...</span> </div>) : (<div className="flex flex-col items-center gap-2 text-blue-200" style={{ transform: `scale(${100 / zoom})` }}> <ImageIcon size={48} strokeWidth={1.5} /> </div>)}
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </div>
+                                        )}
+                                        {(el.type === 'gen-video' || el.type === 'video') && (
+                                            <div className={`w-full h-full flex flex-col relative transition-all ${el.url ? 'bg-black' : 'bg-[#F0FAFF]'} ${isSelected ? 'ring-1 ring-blue-500' : ((el.type === 'gen-video' || el.type === 'video') && !el.url ? 'border border-blue-100' : '')} ${(el.type === 'gen-video' || el.type === 'video') ? `rounded-lg ${el.url ? 'overflow-hidden' : ''}` : ''}`}>
+                                                {el.url ? (
+                                                    <>
+                                                        <div className="w-full h-full relative flex items-center justify-center">
+                                                            <video src={el.url} className="w-full h-full object-contain" controls />
+                                                        </div>
+                                                        {/* Resize Handles - Only for Selected */}
+                                                        {isSelected && (
+                                                            <>
+                                                                <div className="absolute top-0 left-0 w-3 h-3 bg-white border-2 border-blue-500 rounded-full -translate-x-1/2 -translate-y-1/2 z-20 cursor-nw-resize hover:scale-125 transition" onMouseDown={(e) => handleResizeStart(e, 'nw', el.id)}></div>
+                                                                <div className="absolute top-0 right-0 w-3 h-3 bg-white border-2 border-blue-500 rounded-full translate-x-1/2 -translate-y-1/2 z-20 cursor-ne-resize hover:scale-125 transition" onMouseDown={(e) => handleResizeStart(e, 'ne', el.id)}></div>
+                                                                <div className="absolute bottom-0 left-0 w-3 h-3 bg-white border-2 border-blue-500 rounded-full -translate-x-1/2 translate-y-1/2 z-20 cursor-sw-resize hover:scale-125 transition" onMouseDown={(e) => handleResizeStart(e, 'sw', el.id)}></div>
+                                                                <div className="absolute bottom-0 right-0 w-3 h-3 bg-white border-2 border-blue-500 rounded-full translate-x-1/2 translate-y-1/2 z-20 cursor-se-resize hover:scale-125 transition" onMouseDown={(e) => handleResizeStart(e, 'se', el.id)}></div>
+                                                                {/* Side Handles */}
+                                                                <div className="absolute top-1/2 left-0 w-1.5 h-6 bg-white border border-blue-500 rounded-full -translate-x-1/2 -translate-y-1/2 z-20 cursor-ew-resize hover:scale-110 transition hidden group-hover:block" onMouseDown={(e) => handleResizeStart(e, 'w', el.id)}></div>
+                                                                <div className="absolute top-1/2 right-0 w-1.5 h-6 bg-white border border-blue-500 rounded-full translate-x-1/2 -translate-y-1/2 z-20 cursor-ew-resize hover:scale-110 transition hidden group-hover:block" onMouseDown={(e) => handleResizeStart(e, 'e', el.id)}></div>
+
+                                                                {/* Top Selection Info Bar (Counter-Scaled) */}
+                                                                {/* Left: Name */}
+                                                                <div
+                                                                    className="absolute top-0 left-0 flex items-center gap-1.5 text-xs font-semibold text-gray-700 whitespace-nowrap pointer-events-none select-none opacity-0 group-hover:opacity-100 transition-opacity delay-75 duration-200 origin-bottom-left z-50 mix-blend-difference text-white"
+                                                                    style={{
+                                                                        transform: `scale(${100 / zoom}) translateY(calc(-100% - 4px))`
+                                                                    }}
+                                                                >
+                                                                    <Video size={12} className="opacity-80" />
+                                                                    <span>视频</span>
+                                                                </div>
+
+                                                                {/* Right: Dimensions */}
+                                                                <div
+                                                                    className="absolute top-0 right-0 font-mono text-[10px] font-medium text-gray-500 whitespace-nowrap pointer-events-none select-none opacity-0 group-hover:opacity-100 transition-opacity delay-75 duration-200 origin-bottom-right z-50 mix-blend-difference text-white"
+                                                                    style={{
+                                                                        transform: `scale(${100 / zoom}) translateY(calc(-100% - 6px))`
+                                                                    }}
+                                                                >
+                                                                    {Math.round(el.width)} × {Math.round(el.height)}
+                                                                </div>
+                                                            </>
+                                                        )}
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        {/* Floating label above node — only when selected */}
+                                                        {isSelected && (
+                                                            <>
+                                                                <div
+                                                                    className="absolute top-0 left-0 flex items-center gap-1.5 text-xs font-semibold text-gray-700 whitespace-nowrap pointer-events-none select-none z-50"
+                                                                    style={{ transform: `scale(${100 / zoom}) translateY(calc(-100% - 4px))` }}
+                                                                >
+                                                                    <Video size={12} className="opacity-80" />
+                                                                    <span>视频生成器</span>
+                                                                </div>
+                                                                <div
+                                                                    className="absolute top-0 right-0 font-mono text-[10px] font-medium text-gray-500 whitespace-nowrap pointer-events-none select-none z-50"
+                                                                    style={{ transform: `scale(${100 / zoom}) translateY(calc(-100% - 6px))` }}
+                                                                >
+                                                                    {Math.round(el.width)} × {Math.round(el.height)}
+                                                                </div>
+                                                            </>
+                                                        )}
+                                                        <div className="flex-1 flex items-center justify-center relative group-hover:bg-blue-50/50 transition-colors">
+                                                            {el.isGenerating ? (<div className="flex flex-col items-center gap-4" style={{ transform: `scale(${100 / zoom})` }}> <Loader2 size={48} className="animate-spin text-blue-500" /> <span className="text-sm text-blue-400 font-medium whitespace-nowrap">Creating magic...</span> </div>) : (<div className="flex flex-col items-center gap-2 text-blue-200" style={{ transform: `scale(${100 / zoom})` }}> <Film size={48} strokeWidth={1.5} /> </div>)}
+                                                        </div>
+                                                    </>
+                                                )}
                                             </div>
                                         )}
                                     </div>
                                 );
-                            }
-
-                            return (
-                                <div key={el.id} id={`canvas-el-${el.id}`} className={`absolute group ${isSelected && el.type !== 'text' ? 'ring-2 ring-blue-500' : ''} ${isSelected && el.type === 'text' ? 'ring-1 ring-blue-500 ring-offset-2' : ''}`} style={{ left: el.x, top: el.y, width: el.type === 'text' ? 'auto' : el.width, height: el.type === 'text' ? 'auto' : el.height, zIndex: el.zIndex, cursor: activeTool === 'select' ? 'move' : (activeTool === 'mark' ? 'crosshair' : 'default'), whiteSpace: el.type === 'text' ? 'nowrap' : 'normal' }} onMouseDown={(e) => handleElementMouseDown(e, el.id)} onDoubleClick={() => { if (el.type === 'text') { setEditingTextId(el.id); } else if (el.url) { setPreviewUrl(el.url); } }}>
-                                    {(isSelected || isDraggingElement) && editingTextId !== el.id && (<div className="absolute -top-8 right-0 bg-white shadow-md rounded-md p-1 cursor-pointer hover:bg-red-50 hover:text-red-500 z-50"><Trash2 size={14} onClick={(e) => { e.stopPropagation(); deleteSelectedElement(); }} /></div>)}
-                                    {/* ... (rest of element rendering remains same) ... */}
-                                    {el.type === 'shape' && (
-                                        <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" className="overflow-visible">
-                                            {el.shapeType === 'square' && (<rect x="0" y="0" width="100" height="100" rx={el.cornerRadius ? (el.cornerRadius / Math.min(el.width, el.height)) * 100 : 0} fill={el.fillColor} stroke={el.strokeColor} strokeWidth={el.strokeColor === 'transparent' ? 0 : (el.strokeWidth || 2)} vectorEffect="non-scaling-stroke" />)}
-                                            {el.shapeType === 'circle' && (<circle cx="50" cy="50" r="50" fill={el.fillColor} stroke={el.strokeColor} strokeWidth={el.strokeColor === 'transparent' ? 0 : (el.strokeWidth || 2)} vectorEffect="non-scaling-stroke" />)}
-                                            {el.shapeType === 'triangle' && (<polygon points="50,0 100,100 0,100" fill={el.fillColor} stroke={el.strokeColor} strokeWidth={el.strokeColor === 'transparent' ? 0 : (el.strokeWidth || 2)} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />)}
-                                            {el.shapeType === 'star' && (<polygon points="50 2 61 35 98 35 68 57 79 91 50 70 21 91 32 57 2 35 39 35" fill={el.fillColor} stroke={el.strokeColor} strokeWidth={el.strokeColor === 'transparent' ? 0 : (el.strokeWidth || 2)} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />)}
-                                            {el.shapeType === 'arrow-right' && (<polygon points="0,30 60,30 60,10 100,50 60,90 60,70 0,70" fill={el.fillColor} stroke={el.strokeColor} strokeWidth={el.strokeColor === 'transparent' ? 0 : (el.strokeWidth || 2)} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />)}
-                                            {el.shapeType === 'arrow-left' && (<polygon points="100,30 40,30 40,10 0,50 40,90 40,70 100,70" fill={el.fillColor} stroke={el.strokeColor} strokeWidth={el.strokeColor === 'transparent' ? 0 : (el.strokeWidth || 2)} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />)}
-                                            {el.shapeType === 'bubble' && (<path d="M10,10 Q90,10 90,50 Q90,90 50,90 L30,100 L40,85 Q10,80 10,50 Q10,10 50,10" fill={el.fillColor} stroke={el.strokeColor} strokeWidth={el.strokeColor === 'transparent' ? 0 : (el.strokeWidth || 2)} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />)}
-                                        </svg>
-                                    )}
-                                    {(el.type === 'image' || el.type === 'gen-image') && (
-                                        <div className={`w-full h-full flex flex-col relative transition-all ${el.url && el.type === 'image' ? '' : (el.url ? 'bg-white' : 'bg-[#F0F9FF]')} ${el.type === 'gen-image' && !el.url ? 'border border-blue-100' : ''} ${el.type === 'gen-image' ? `rounded-lg ${el.url ? 'overflow-hidden' : ''}` : ''}`}>
-                                            {el.url ? (
-                                                <>
-                                                    <img src={el.url} className={`w-full h-full ${el.type === 'image' ? 'w-full h-full' : 'object-cover'}`} draggable={false} />
-                                                    {/* Resize Handles - Only for Image & Selected */}
-                                                    {isSelected && (
-                                                        <>
-                                                            <div className="absolute top-0 left-0 w-3 h-3 bg-white border-2 border-blue-500 rounded-full -translate-x-1/2 -translate-y-1/2 z-20 cursor-nw-resize hover:scale-125 transition" onMouseDown={(e) => handleResizeStart(e, 'nw', el.id)}></div>
-                                                            <div className="absolute top-0 right-0 w-3 h-3 bg-white border-2 border-blue-500 rounded-full translate-x-1/2 -translate-y-1/2 z-20 cursor-ne-resize hover:scale-125 transition" onMouseDown={(e) => handleResizeStart(e, 'ne', el.id)}></div>
-                                                            <div className="absolute bottom-0 left-0 w-3 h-3 bg-white border-2 border-blue-500 rounded-full -translate-x-1/2 translate-y-1/2 z-20 cursor-sw-resize hover:scale-125 transition" onMouseDown={(e) => handleResizeStart(e, 'sw', el.id)}></div>
-                                                            <div className="absolute bottom-0 right-0 w-3 h-3 bg-white border-2 border-blue-500 rounded-full translate-x-1/2 translate-y-1/2 z-20 cursor-se-resize hover:scale-125 transition" onMouseDown={(e) => handleResizeStart(e, 'se', el.id)}></div>
-                                                            {/* Side Handles */}
-                                                            <div className="absolute top-1/2 left-0 w-1.5 h-6 bg-white border border-blue-500 rounded-full -translate-x-1/2 -translate-y-1/2 z-20 cursor-ew-resize hover:scale-110 transition hidden group-hover:block" onMouseDown={(e) => handleResizeStart(e, 'w', el.id)}></div>
-                                                            <div className="absolute top-1/2 right-0 w-1.5 h-6 bg-white border border-blue-500 rounded-full translate-x-1/2 -translate-y-1/2 z-20 cursor-ew-resize hover:scale-110 transition hidden group-hover:block" onMouseDown={(e) => handleResizeStart(e, 'e', el.id)}></div>
-                                                            {/* Top Selection Info Bar (Clean Text Style) */}
-                                                            {/* Left: Name */}
-                                                            <div
-                                                                className="absolute top-0 left-0 flex items-center gap-1.5 text-xs font-semibold text-gray-700 whitespace-nowrap pointer-events-none select-none opacity-0 group-hover:opacity-100 transition-opacity delay-75 duration-200 origin-bottom-left z-50"
-                                                                style={{
-                                                                    transform: `scale(${100 / zoom}) translateY(calc(-100% - 4px))`
-                                                                }}
-                                                            >
-                                                                <ImageIcon size={12} className="opacity-80" />
-                                                                <span>{el.id.includes('unnamed') ? 'unnamed' : '图像'}</span>
-                                                            </div>
-
-                                                            {/* Right: Dimensions */}
-                                                            <div
-                                                                className="absolute top-0 right-0 font-mono text-[10px] font-medium text-gray-500 whitespace-nowrap pointer-events-none select-none opacity-0 group-hover:opacity-100 transition-opacity delay-75 duration-200 origin-bottom-right z-50"
-                                                                style={{
-                                                                    transform: `scale(${100 / zoom}) translateY(calc(-100% - 6px))`
-                                                                }}
-                                                            >
-                                                                {Math.round(el.width)} × {Math.round(el.height)}
-                                                            </div>
-                                                        </>
-                                                    )}
-                                                </>
-                                            ) : (
-                                                <>
-                                                    {/* Floating label above node — only when selected */}
-                                                    {isSelected && (
-                                                        <>
-                                                            <div
-                                                                className="absolute top-0 left-0 flex items-center gap-1.5 text-xs font-semibold text-gray-700 whitespace-nowrap pointer-events-none select-none z-50"
-                                                                style={{ transform: `scale(${100 / zoom}) translateY(calc(-100% - 4px))` }}
-                                                            >
-                                                                <ImageIcon size={12} className="opacity-80" />
-                                                                <span>图像生成器</span>
-                                                            </div>
-                                                            <div
-                                                                className="absolute top-0 right-0 font-mono text-[10px] font-medium text-gray-500 whitespace-nowrap pointer-events-none select-none z-50"
-                                                                style={{ transform: `scale(${100 / zoom}) translateY(calc(-100% - 6px))` }}
-                                                            >
-                                                                {Math.round(el.width)} × {Math.round(el.height)}
-                                                            </div>
-                                                        </>
-                                                    )}
-                                                    <div className="flex-1 flex items-center justify-center relative group-hover:bg-blue-50/50 transition-colors">
-                                                        {el.isGenerating ? (<div className="flex flex-col items-center gap-4" style={{ transform: `scale(${100 / zoom})` }}> <Loader2 size={48} className="animate-spin text-blue-500" /> <span className="text-sm text-blue-400 font-medium whitespace-nowrap">Creating magic...</span> </div>) : (<div className="flex flex-col items-center gap-2 text-blue-200" style={{ transform: `scale(${100 / zoom})` }}> <ImageIcon size={48} strokeWidth={1.5} /> </div>)}
-                                                    </div>
-                                                </>
-                                            )}
-                                        </div>
-                                    )}
-                                    {(el.type === 'gen-video' || el.type === 'video') && (
-                                        <div className={`w-full h-full flex flex-col relative transition-all ${el.url ? 'bg-black' : 'bg-[#F0FAFF]'} ${isSelected ? 'ring-1 ring-blue-500' : ((el.type === 'gen-video' || el.type === 'video') && !el.url ? 'border border-blue-100' : '')} ${(el.type === 'gen-video' || el.type === 'video') ? `rounded-lg ${el.url ? 'overflow-hidden' : ''}` : ''}`}>
-                                            {el.url ? (
-                                                <>
-                                                    <div className="w-full h-full relative flex items-center justify-center">
-                                                        <video src={el.url} className="w-full h-full object-contain" controls />
-                                                    </div>
-                                                    {/* Resize Handles - Only for Selected */}
-                                                    {isSelected && (
-                                                        <>
-                                                            <div className="absolute top-0 left-0 w-3 h-3 bg-white border-2 border-blue-500 rounded-full -translate-x-1/2 -translate-y-1/2 z-20 cursor-nw-resize hover:scale-125 transition" onMouseDown={(e) => handleResizeStart(e, 'nw', el.id)}></div>
-                                                            <div className="absolute top-0 right-0 w-3 h-3 bg-white border-2 border-blue-500 rounded-full translate-x-1/2 -translate-y-1/2 z-20 cursor-ne-resize hover:scale-125 transition" onMouseDown={(e) => handleResizeStart(e, 'ne', el.id)}></div>
-                                                            <div className="absolute bottom-0 left-0 w-3 h-3 bg-white border-2 border-blue-500 rounded-full -translate-x-1/2 translate-y-1/2 z-20 cursor-sw-resize hover:scale-125 transition" onMouseDown={(e) => handleResizeStart(e, 'sw', el.id)}></div>
-                                                            <div className="absolute bottom-0 right-0 w-3 h-3 bg-white border-2 border-blue-500 rounded-full translate-x-1/2 translate-y-1/2 z-20 cursor-se-resize hover:scale-125 transition" onMouseDown={(e) => handleResizeStart(e, 'se', el.id)}></div>
-                                                            {/* Side Handles */}
-                                                            <div className="absolute top-1/2 left-0 w-1.5 h-6 bg-white border border-blue-500 rounded-full -translate-x-1/2 -translate-y-1/2 z-20 cursor-ew-resize hover:scale-110 transition hidden group-hover:block" onMouseDown={(e) => handleResizeStart(e, 'w', el.id)}></div>
-                                                            <div className="absolute top-1/2 right-0 w-1.5 h-6 bg-white border border-blue-500 rounded-full translate-x-1/2 -translate-y-1/2 z-20 cursor-ew-resize hover:scale-110 transition hidden group-hover:block" onMouseDown={(e) => handleResizeStart(e, 'e', el.id)}></div>
-
-                                                            {/* Top Selection Info Bar (Counter-Scaled) */}
-                                                            {/* Left: Name */}
-                                                            <div
-                                                                className="absolute top-0 left-0 flex items-center gap-1.5 text-xs font-semibold text-gray-700 whitespace-nowrap pointer-events-none select-none opacity-0 group-hover:opacity-100 transition-opacity delay-75 duration-200 origin-bottom-left z-50 mix-blend-difference text-white"
-                                                                style={{
-                                                                    transform: `scale(${100 / zoom}) translateY(calc(-100% - 4px))`
-                                                                }}
-                                                            >
-                                                                <Video size={12} className="opacity-80" />
-                                                                <span>视频</span>
-                                                            </div>
-
-                                                            {/* Right: Dimensions */}
-                                                            <div
-                                                                className="absolute top-0 right-0 font-mono text-[10px] font-medium text-gray-500 whitespace-nowrap pointer-events-none select-none opacity-0 group-hover:opacity-100 transition-opacity delay-75 duration-200 origin-bottom-right z-50 mix-blend-difference text-white"
-                                                                style={{
-                                                                    transform: `scale(${100 / zoom}) translateY(calc(-100% - 6px))`
-                                                                }}
-                                                            >
-                                                                {Math.round(el.width)} × {Math.round(el.height)}
-                                                            </div>
-                                                        </>
-                                                    )}
-                                                </>
-                                            ) : (
-                                                <>
-                                                    {/* Floating label above node — only when selected */}
-                                                    {isSelected && (
-                                                        <>
-                                                            <div
-                                                                className="absolute top-0 left-0 flex items-center gap-1.5 text-xs font-semibold text-gray-700 whitespace-nowrap pointer-events-none select-none z-50"
-                                                                style={{ transform: `scale(${100 / zoom}) translateY(calc(-100% - 4px))` }}
-                                                            >
-                                                                <Video size={12} className="opacity-80" />
-                                                                <span>视频生成器</span>
-                                                            </div>
-                                                            <div
-                                                                className="absolute top-0 right-0 font-mono text-[10px] font-medium text-gray-500 whitespace-nowrap pointer-events-none select-none z-50"
-                                                                style={{ transform: `scale(${100 / zoom}) translateY(calc(-100% - 6px))` }}
-                                                            >
-                                                                {Math.round(el.width)} × {Math.round(el.height)}
-                                                            </div>
-                                                        </>
-                                                    )}
-                                                    <div className="flex-1 flex items-center justify-center relative group-hover:bg-blue-50/50 transition-colors">
-                                                        {el.isGenerating ? (<div className="flex flex-col items-center gap-4" style={{ transform: `scale(${100 / zoom})` }}> <Loader2 size={48} className="animate-spin text-blue-500" /> <span className="text-sm text-blue-400 font-medium whitespace-nowrap">Creating magic...</span> </div>) : (<div className="flex flex-col items-center gap-2 text-blue-200" style={{ transform: `scale(${100 / zoom})` }}> <Film size={48} strokeWidth={1.5} /> </div>)}
-                                                    </div>
-                                                </>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
+                            })
+                        })()}
                         {/* Alignment Guide Lines */}
                         {alignGuides.map((guide, i) => (
                             guide.type === 'v' ? (
@@ -4829,50 +4107,54 @@ const Workspace: React.FC = () => {
             </div>
 
             {/* Touch Edit Mode Indicator */}
-            {touchEditMode && (
-                <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-blue-600 text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2 text-sm font-medium">
-                    <Scan size={16} />
-                    <span>Touch Edit 模式 — 点击图片区域进行编辑</span>
-                    <button onClick={() => setTouchEditMode(false)} className="ml-2 w-5 h-5 bg-white/20 rounded-full flex items-center justify-center hover:bg-white/30 transition">
-                        <X size={12} />
-                    </button>
-                </div>
-            )}
-
-            {/* Touch Edit Popup */}
-            {touchEditPopup && (
-                <div
-                    className="fixed bg-white rounded-xl shadow-2xl border border-gray-200 p-4 w-72 z-[60] animate-in fade-in duration-200"
-                    style={{ left: Math.min(touchEditPopup.x, window.innerWidth - 300), top: Math.min(touchEditPopup.y, window.innerHeight - 250) }}
-                    onMouseDown={(e) => e.stopPropagation()}
-                >
-                    <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2 text-gray-700 font-medium text-sm">
-                            <Scan size={14} /> 区域分析
-                        </div>
-                        <button onClick={() => { setTouchEditPopup(null); setTouchEditInstruction(''); }} className="text-gray-400 hover:text-gray-600 transition">
-                            <X size={14} />
+            {
+                touchEditMode && (
+                    <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-blue-600 text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2 text-sm font-medium">
+                        <Scan size={16} />
+                        <span>Touch Edit 模式 — 点击图片区域进行编辑</span>
+                        <button onClick={() => setTouchEditMode(false)} className="ml-2 w-5 h-5 bg-white/20 rounded-full flex items-center justify-center hover:bg-white/30 transition">
+                            <X size={12} />
                         </button>
                     </div>
-                    <p className="text-xs text-gray-500 mb-3 leading-relaxed">{touchEditPopup.analysis}</p>
-                    <input
-                        value={touchEditInstruction}
-                        onChange={(e) => setTouchEditInstruction(e.target.value)}
-                        placeholder="输入编辑指令，如：换成红色"
-                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 mb-2"
-                        onKeyDown={(e) => { if (e.key === 'Enter') handleTouchEditExecute(); }}
-                    />
-                    <button
-                        onClick={handleTouchEditExecute}
-                        disabled={!touchEditInstruction.trim() || isTouchEditing}
-                        className="w-full py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-900 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                    >
-                        {isTouchEditing ? <><Loader2 size={14} className="animate-spin" /> 处理中...</> : '执行编辑'}
-                    </button>
-                </div>
-            )}
+                )
+            }
 
-        </div>
+            {/* Touch Edit Popup */}
+            {
+                touchEditPopup && (
+                    <div
+                        className="fixed bg-white rounded-xl shadow-2xl border border-gray-200 p-4 w-72 z-[60] animate-in fade-in duration-200"
+                        style={{ left: Math.min(touchEditPopup.x, window.innerWidth - 300), top: Math.min(touchEditPopup.y, window.innerHeight - 250) }}
+                        onMouseDown={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2 text-gray-700 font-medium text-sm">
+                                <Scan size={14} /> 区域分析
+                            </div>
+                            <button onClick={() => { setTouchEditPopup(null); setTouchEditInstruction(''); }} className="text-gray-400 hover:text-gray-600 transition">
+                                <X size={14} />
+                            </button>
+                        </div>
+                        <p className="text-xs text-gray-500 mb-3 leading-relaxed">{touchEditPopup.analysis}</p>
+                        <input
+                            value={touchEditInstruction}
+                            onChange={(e) => setTouchEditInstruction(e.target.value)}
+                            placeholder="输入编辑指令，如：换成红色"
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 mb-2"
+                            onKeyDown={(e) => { if (e.key === 'Enter') handleTouchEditExecute(); }}
+                        />
+                        <button
+                            onClick={handleTouchEditExecute}
+                            disabled={!touchEditInstruction.trim() || isTouchEditing}
+                            className="w-full py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-900 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        >
+                            {isTouchEditing ? <><Loader2 size={14} className="animate-spin" /> 处理中...</> : '执行编辑'}
+                        </button>
+                    </div>
+                )
+            }
+
+        </div >
     );
 };
 
