@@ -16,3 +16,5 @@ export { LayersPanel } from './LayersPanel';
 export { CanvasToolbar } from './CanvasToolbar';
 export { ProjectHeader } from './ProjectHeader';
 export { MessageList } from './MessageList';
+export { AssistantSidebar } from './AssistantSidebar';
+export { InputArea } from './InputArea';
