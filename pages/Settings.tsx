@@ -10,10 +10,11 @@ import {
 import { SettingsCard } from '../components/Settings/SettingsCard';
 import { SettingsControl, SettingsToggle, SettingsInput, SettingsSelect } from '../components/Settings/SettingsControl';
 import { fetchAvailableModels } from '../services/gemini';
+import { useImageHostStore } from '../stores/imageHost.store';
 import Sidebar from '../components/Sidebar';
 
 type ApiProvider = 'gemini' | 'yunwu' | 'custom';
-type SettingsTab = 'api' | 'mapping' | 'advanced' | 'storage' | 'about';
+type SettingsTab = 'api' | 'mapping' | 'hosting' | 'advanced' | 'storage' | 'about';
 
 interface ModelInfo {
     id: string;
@@ -31,30 +32,23 @@ interface ApiProviderConfig {
     isCustom?: boolean;
 }
 
-const RECOMMENDED_MODELS = {
-    script: [
-        { id: 'gpt-4o', name: 'GPT-4o', brand: 'OpenAI' },
-        { id: 'claude-3-5-sonnet-20240620', name: 'Claude 3.5 Sonnet', brand: 'Anthropic' },
-        { id: 'deepseek-chat', name: 'DeepSeek-V3', brand: 'DeepSeek' }, /* cspell:disable-line */
-        { id: 'deepseek-reasoner', name: 'DeepSeek-R1', brand: 'DeepSeek' }, /* cspell:disable-line */
-        { id: 'doubao-pro-32k', name: '豆包 Pro (火山)', brand: 'Volcengine' }, /* cspell:disable-line */
-        { id: 'gemini-2.0-flash-exp', name: 'Gemini 2.0 Flash', brand: 'Google' },
-    ],
-    image: [
-        { id: 'dall-e-3', name: 'DALL-E 3', brand: 'OpenAI' },
-        { id: 'flux-1.1-pro', name: 'FLUX 1.1 Pro', brand: 'Flux' },
-        { id: 'flux-pro', name: 'FLUX Pro', brand: 'Flux' },
-        { id: 'ideogram-v2', name: 'Ideogram v2', brand: 'Ideogram' },
-        { id: 'doubao-vision', name: '豆包 视界 (火山)', brand: 'Volcengine' }, /* cspell:disable-line */
-        { id: 'imagen-3', name: 'Imagen 3', brand: 'Google' }, /* cspell:disable-line */
-    ],
-    video: [
-        { id: 'veo-3.1-fast-generate-preview', name: 'Veo 3.1 Fast', brand: 'Google' },
-        { id: 'veo-3.1-generate-preview', name: 'Veo 3.1 Pro', brand: 'Google' },
-        { id: 'kling-v1-5', name: 'Kling 1.5', brand: 'Other' },
-        { id: 'hailuo-video-v1', name: 'Hailuo Video', brand: 'Other' }, /* cspell:disable-line */
-    ]
-};
+const DEFAULT_MODEL_WHITELIST = [
+    // 图片模型
+    'gemini-3.1-flash-image-preview', 'gemini-3-pro-image-preview', 'gemini-2.5-flash-image',
+    'doubao-seedream-5-0-260128', 'gpt-image-1.5-all', 'flux-pro-max',
+    // 语言模型
+    'gemini-3.1-pro-preview', 'gemini-3-pro-preview', 'gemini-3-flash-preview',
+    'gemini-3-pro-preview-11-2025', 'gemini-3-pro-preview-thinking',
+    'gemini-2.5-pro', 'gemini-2.5-pro-thinking',
+    'claude-sonnet-4-6', 'claude-opus-4-6', 'claude-opus-4-6-thinking',
+    'claude-haiku-4-5-20251001-thinking', 'claude-haiku-4-5-20251001',
+    'deepseek-v3.2', 'deepseek-v3.2-thinking', /* cspell:disable-line */
+    'gpt-5.3-codex', 'gpt-5.3-codex-high', 'grok-4.2',
+    // 视频模型
+    'grok-video-3-15s', 'grok-video-3-10s', 'grok-video-3',
+    'doubao-seedance-1-5-pro-251215', /* cspell:disable-line */
+    'sora-2-all', 'sora-2-pro-all', 'wan2.6-i2v', 'veo3.1-4k', 'veo3.1-c'
+];
 
 const PROVIDER_ICONS: { id: ModelInfo['brand'] | string; name: string; icon: string }[] = [
     { id: 'deepseek', name: 'DeepSeek', icon: '/icons/deepseek.svg' }, /* cspell:disable-line */
@@ -147,6 +141,9 @@ const SettingsPage: React.FC = () => {
     // Editing state
     const [editingProvider, setEditingProvider] = useState<ApiProviderConfig | null>(null);
 
+    // Image Host Store (Reactive Hook)
+    const imageHost = useImageHostStore();
+
     useEffect(() => {
         const savedProviders = localStorage.getItem('api_providers');
         if (savedProviders) {
@@ -232,6 +229,22 @@ const SettingsPage: React.FC = () => {
         });
 
         setAvailableModels(formattedModels);
+
+        // 自动勾选逻辑：如果模型在白名单中，且目前未被手动勾选，则自动勾选
+        const autoSelect = (cat: 'script' | 'image' | 'video', currentSelected: string[], setCurrent: React.Dispatch<React.SetStateAction<string[]>>) => {
+            const newMatches = formattedModels
+                .filter(m => m.category === cat && DEFAULT_MODEL_WHITELIST.includes(m.id) && !currentSelected.includes(m.id))
+                .map(m => m.id);
+            
+            if (newMatches.length > 0) {
+                setCurrent(prev => [...new Set([...prev, ...newMatches])]);
+            }
+        };
+
+        autoSelect('script', selectedScriptModels, setSelectedScriptModels);
+        autoSelect('image', selectedImageModels, setSelectedImageModels);
+        autoSelect('video', selectedVideoModels, setSelectedVideoModels);
+
         setIsLoadingModels(false);
     };
 
@@ -281,6 +294,7 @@ const SettingsPage: React.FC = () => {
     const tabs: { id: SettingsTab; label: string; icon: any }[] = [
         { id: 'api', label: '服务商配置', icon: Key },
         { id: 'mapping', label: '模型映射', icon: Globe },
+        { id: 'hosting', label: '图床配置', icon: ImageIcon },
         { id: 'advanced', label: '交互设置', icon: Sliders },
         { id: 'storage', label: '缓存磁盘', icon: HardDrive },
         { id: 'about', label: '系统架构', icon: Info },
@@ -297,60 +311,78 @@ const SettingsPage: React.FC = () => {
     };
 
     return (
-        <div className="flex min-h-screen bg-[#f8f9fb]">
+        <div className="flex min-h-screen bg-background selection:bg-primary/10 transition-colors duration-500">
             <Sidebar />
             
-            <div className="flex-1 flex flex-col ml-24 mr-6 my-6 bg-white rounded-[2.5rem] shadow-xl shadow-gray-200/50 border border-white overflow-hidden">
-                <header className="px-10 py-8 border-b border-gray-100 flex items-center justify-between sticky top-0 z-10 bg-white/80 backdrop-blur-md">
-                    <div className="flex items-center gap-4">
+            <div className="flex-1 flex flex-col lg:ml-24 lg:mr-8 lg:my-8 m-0 bg-card lg:rounded-lg shadow-premium border border-border/40 overflow-hidden pb-16 lg:pb-0">
+                <header className="px-6 lg:px-10 py-6 lg:py-8 border-b border-border/40 flex items-center justify-between sticky top-0 z-20 bg-card/80 backdrop-blur-xl">
+                    <div className="flex items-center gap-4 lg:gap-6">
                         <button 
                             onClick={() => navigate(-1)}
-                            className="w-10 h-10 rounded-xl flex items-center justify-center text-gray-400 hover:bg-gray-50 hover:text-gray-900 transition-all"
+                            className="w-11 h-11 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground border border-transparent hover:border-border transition-all active:scale-90"
                         >
                             <ArrowLeft size={20} />
                         </button>
-                        <h3 className="text-2xl font-black text-gray-900 flex items-center gap-4">
-                            设置中心
-                            <span className="text-xs bg-gray-100 text-gray-400 px-3 py-1 rounded-full font-bold">
-                                {tabs.find(t => t.id === activeTab)?.label}
-                            </span>
-                        </h3>
+                        <div className="flex flex-col">
+                            <h3 className="text-xl lg:text-2xl font-display font-bold text-foreground tracking-tight flex items-center gap-3">
+                                设置中心
+                                {activeTab && (
+                                    <span className="hidden sm:inline-block text-[10px] bg-primary/10 text-primary px-3 py-0.5 rounded-full font-bold uppercase tracking-wider border border-primary/20">
+                                        {tabs.find(t => t.id === activeTab)?.label}
+                                    </span>
+                                )}
+                            </h3>
+                            <p className="hidden lg:block text-[10px] text-muted-foreground/60 uppercase tracking-[0.2em] mt-1 font-semibold">XC-STUDIO Infrastructure</p>
+                        </div>
                     </div>
                     <div className="flex items-center gap-4">
                         <button
                             onClick={handleSave}
                             disabled={isSaving}
-                            className={`px-8 py-2.5 rounded-xl text-sm font-black text-white shadow-xl transition-all duration-300 active:scale-95 flex items-center gap-3 ${saveStatus === 'success'
-                                ? 'bg-green-500 shadow-green-500/20'
-                                : 'bg-black shadow-black/20 hover:bg-gray-800'
+                            className={`px-5 lg:px-10 py-2 lg:py-3 rounded-md text-xs lg:text-sm font-display font-bold text-white shadow-premium transition-all duration-300 active:scale-95 flex items-center gap-2 lg:gap-3 ${saveStatus === 'success'
+                                ? 'bg-green-500/90 hover:bg-green-500'
+                                : 'bg-primary hover:bg-primary/90'
                                 }`}
                         >
-                            {isSaving ? <Loader2 size={16} className="animate-spin" /> : saveStatus === 'success' ? <Check size={16} /> : <RefreshCw size={16} />}
-                            <span>{saveStatus === 'success' ? '已入库' : '保存设置'}</span>
+                            {isSaving ? <Loader2 size={16} className="animate-spin" /> : saveStatus === 'success' ? <Check size={16} /> : <div className="p-0.5 bg-white/20 rounded"><RefreshCw size={14} /></div>}
+                            <span className="hidden xs:inline">{saveStatus === 'success' ? '配置已入库' : '保存系统设置'}</span>
+                            <span className="xs:hidden">{saveStatus === 'success' ? 'OK' : '保存'}</span>
                         </button>
                     </div>
                 </header>
 
-                <div className="flex flex-1 overflow-hidden">
+                <div className="flex flex-1 flex-col lg:flex-row overflow-hidden">
                     {/* Inner Sidebar */}
-                    <div className="w-64 bg-gray-50/50 border-r border-gray-100 p-6 flex flex-col gap-2">
-                        {tabs.map(tab => (
-                            <button
-                                key={tab.id}
-                                onClick={() => setActiveTab(tab.id)}
-                                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all duration-200 ${activeTab === tab.id
-                                    ? 'bg-white text-black shadow-sm ring-1 ring-black/5'
-                                    : 'text-gray-400 hover:bg-white hover:text-gray-900'
-                                    }`}
-                            >
-                                <tab.icon size={18} strokeWidth={activeTab === tab.id ? 2.5 : 2} />
-                                <span className="text-xs font-black uppercase tracking-wider">{tab.label}</span>
-                            </button>
-                        ))}
+                    <div className="lg:w-72 w-full bg-muted/30 border-r border-border/40 p-4 lg:p-8 flex lg:flex-col overflow-x-auto lg:overflow-y-auto gap-1.5 no-scrollbar">
+                        {tabs.map(tab => {
+                            const Icon = tab.icon;
+                            const active = activeTab === tab.id;
+                            return (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => setActiveTab(tab.id)}
+                                    className={`flex items-center gap-4 px-5 py-3.5 rounded-md transition-all duration-300 group shrink-0 lg:shrink ${active
+                                        ? 'bg-card text-foreground shadow-premium border border-border/50 translate-x-1 lg:translate-x-2'
+                                        : 'text-muted-foreground hover:bg-card/50 hover:text-foreground'
+                                        }`}
+                                >
+                                    <div className={`p-2 rounded-md transition-colors ${active ? 'bg-primary/10 text-primary' : 'bg-muted/50 text-muted-foreground group-hover:bg-muted group-hover:text-foreground'}`}>
+                                        <Icon size={18} />
+                                    </div>
+                                    <span className={`text-sm tracking-tight font-display ${active ? 'font-bold' : 'font-medium'}`}>{tab.label}</span>
+                                    {active && (
+                                        <motion.div 
+                                            layoutId="activeTabDot"
+                                            className="ml-auto w-1.5 h-1.5 rounded-full bg-primary"
+                                        />
+                                    )}
+                                </button>
+                            );
+                        })}
                     </div>
 
                     {/* Main Content */}
-                    <main className="flex-1 overflow-y-auto p-10 space-y-8 no-scrollbar pb-24">
+                    <main className="flex-1 overflow-y-auto p-6 lg:p-10 space-y-8 no-scrollbar pb-24 lg:pb-10">
                         {activeTab === 'api' && (
                             <div className="space-y-6">
                                 <div className="flex items-center justify-between">
@@ -444,6 +476,83 @@ const SettingsPage: React.FC = () => {
                             </div>
                         )}
 
+                        {activeTab === 'hosting' && (
+                            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    <SettingsCard title="图床服务商" icon={<ImageIcon size={18} />} description="选择图片存储方案（用于智能视觉记忆）">
+                                        <div className="space-y-4 pt-4">
+                                            {(['none', 'imgbb', 'custom'] as const).map((providerId) => ( /* cspell:disable-line */
+                                                <button
+                                                    key={providerId}
+                                                    onClick={() => imageHost.actions.setSelectedProvider(providerId)}
+                                                    className={`w-full p-4 rounded-xl border flex items-center justify-between transition-all group ${
+                                                        imageHost.selectedProvider === providerId 
+                                                            ? 'bg-primary/5 border-primary shadow-sm' 
+                                                            : 'bg-card border-border/50 hover:bg-muted/50'
+                                                    }`}
+                                                >
+                                                    <div className="flex items-center gap-4">
+                                                        <div className={`p-2 rounded-lg ${
+                                                            imageHost.selectedProvider === providerId ? 'bg-primary text-white' : 'bg-muted text-muted-foreground'
+                                                        }`}>
+                                                            {providerId === 'none' ? <X size={16} /> : providerId === 'imgbb' ? <ImageIcon size={16} /> : <Globe size={16} />} {/* cspell:disable-line */}
+                                                        </div>
+                                                        <div className="text-left">
+                                                            <div className="text-sm font-bold">{providerId === 'none' ? '不启用' : providerId === 'imgbb' ? 'ImgBB' : '自定义 API'}</div> {/* cspell:disable-line */}
+                                                            <div className="text-[10px] text-muted-foreground uppercase tracking-widest px-0.5">{providerId === 'none' ? '仅使用临时链接' : providerId === 'imgbb' ? '官方 API' : '兼容协议'}</div> {/* cspell:disable-line */}
+                                                        </div>
+                                                    </div>
+                                                    {imageHost.selectedProvider === providerId && <Check size={16} className="text-primary" />}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </SettingsCard>
+
+                                    {imageHost.selectedProvider === 'imgbb' && ( /* cspell:disable-line */
+                                        <SettingsCard title="ImgBB 参数" icon={<Key size={18} />}> {/* cspell:disable-line */}
+                                            <div className="space-y-4 mt-4">
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">API KEY</label>
+                                                    <SettingsInput 
+                                                        type="password" 
+                                                        value={imageHost.imgbbKey} // cspell:disable-line
+                                                        onChange={(e) => imageHost.actions.setImgbbKey(e.target.value)} // cspell:disable-line
+                                                        placeholder="输入 ImgBB API 密钥" // cspell:disable-line
+                                                    />
+                                                </div>
+                                                <p className="text-[10px] text-muted-foreground leading-relaxed px-1">
+                                                    从 <a href="https://api.imgbb.com/" target="_blank" rel="noopener noreferrer" className="text-primary underline">ImgBB API</a> 获取密钥。免费版支持无限存储量。 {/* cspell:disable-line */}
+                                                </p>
+                                            </div>
+                                        </SettingsCard>
+                                    )}
+
+                                    {imageHost.selectedProvider === 'custom' && (
+                                        <SettingsCard title="自定义图床" icon={<Globe size={18} />}>
+                                            <div className="space-y-4 mt-4">
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">上传地址 (Upload URL)</label>
+                                                    <SettingsInput 
+                                                        value={imageHost.customConfig.uploadUrl} 
+                                                        onChange={(e) => imageHost.actions.setCustomConfig({ uploadUrl: e.target.value })} 
+                                                        placeholder="https://your-host.com/api/upload" 
+                                                    />
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">身份验证 (Auth Token)</label>
+                                                    <SettingsInput 
+                                                        type="password" 
+                                                        value={imageHost.customConfig.apiKey} 
+                                                        onChange={(e) => imageHost.actions.setCustomConfig({ apiKey: e.target.value })} 
+                                                        placeholder="Authorization Header" 
+                                                    />
+                                                </div>
+                                            </div>
+                                        </SettingsCard>
+                                    )}
+                                </div>
+                            </div>
+                        )}
                         {activeTab === 'mapping' && (
                             <div className="space-y-6">
                                 {(['script', 'image', 'video'] as const).map(cat => (
@@ -541,29 +650,29 @@ const SettingsPage: React.FC = () => {
                         )}
 
                         {activeTab === 'about' && (
-                            <div className="space-y-10">
-                                <div className="bg-gradient-to-br from-black to-gray-800 p-16 rounded-[3rem] text-white relative overflow-hidden">
+                            <div className="space-y-10 max-w-4xl mx-auto">
+                                <div className="bg-foreground p-12 lg:p-16 rounded-lg text-background relative overflow-hidden shadow-2xl">
                                     <div className="relative z-10">
-                                        <h4 className="text-6xl font-black mb-4 tracking-tighter">XC-STUDIO</h4>
-                                        <p className="text-blue-400 text-sm font-bold uppercase tracking-[0.4em] mb-12">System Architecture Engine V4.2.0</p>
-                                        <div className="flex gap-4">
-                                            <div className="px-6 py-2.5 bg-white/10 rounded-2xl text-[10px] font-black backdrop-blur-md">PRODUCTION STABLE</div>
-                                            <div className="px-6 py-2.5 bg-blue-600 rounded-2xl text-[10px] font-black shadow-lg shadow-blue-500/20">AGENT CORE UPGRADED</div>
+                                        <h4 className="text-5xl lg:text-7xl font-display font-black mb-4 tracking-tighter">XC-STUDIO</h4>
+                                        <p className="text-primary text-xs lg:text-sm font-bold uppercase tracking-[0.4em] mb-12">System Architecture Engine V4.2.0</p>
+                                        <div className="flex flex-wrap gap-4">
+                                            <div className="px-5 py-2 bg-background/10 rounded-md text-[10px] font-bold backdrop-blur-md border border-background/20 uppercase tracking-widest">PRODUCTION STABLE</div>
+                                            <div className="px-5 py-2 bg-primary rounded-md text-[10px] font-bold shadow-lg shadow-primary/20 uppercase tracking-widest">AGENT CORE UPGRADED</div>
                                         </div>
                                     </div>
-                                    <Zap size={280} className="absolute -right-12 -bottom-12 opacity-10 rotate-12 text-white fill-white" />
+                                    <Zap size={280} className="absolute -right-12 -bottom-12 opacity-5 rotate-12 text-background fill-background" />
                                 </div>
                                 
-                                <div className="grid grid-cols-2 gap-8">
-                                    <SettingsCard title="关于系统" icon={<Info size={18} />}>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    <SettingsCard title="系统信息" icon={<Info size={18} />}>
                                         <div className="mt-4 space-y-4">
-                                            <div className="flex items-center justify-between text-xs">
-                                                <span className="text-gray-400 font-bold uppercase tracking-wider">内核版本</span>
-                                                <span className="font-mono font-black text-blue-600">v4.2.1-SR2</span>
+                                            <div className="flex items-center justify-between py-2 border-b border-border/30">
+                                                <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">内核版本</span>
+                                                <span className="font-mono font-bold text-primary text-xs">v4.2.1-SR2</span>
                                             </div>
-                                            <div className="flex items-center justify-between text-xs">
-                                                <span className="text-gray-400 font-bold uppercase tracking-wider">开发代号</span>
-                                                <span className="font-black">Antigravity</span>
+                                            <div className="flex items-center justify-between py-2">
+                                                <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">开发代号</span>
+                                                <span className="font-display font-bold text-foreground text-xs tracking-tight">Antigravity</span>
                                             </div>
                                         </div>
                                     </SettingsCard>

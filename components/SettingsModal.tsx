@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { SettingsCard } from './Settings/SettingsCard';
 import { SettingsControl, SettingsToggle, SettingsInput, SettingsSelect } from './Settings/SettingsControl';
 import { fetchAvailableModels } from '../services/gemini';
+import { useImageHostStore } from '../stores/imageHost.store';
 
 interface SettingsModalProps {
     isOpen: boolean;
@@ -12,12 +13,12 @@ interface SettingsModalProps {
 }
 
 type ApiProvider = 'gemini' | 'yunwu' | 'custom';
-type SettingsTab = 'api' | 'mapping' | 'advanced' | 'storage' | 'about';
+type SettingsTab = 'api' | 'mapping' | 'hosting' | 'advanced' | 'storage' | 'about';
 
 interface ModelInfo {
     id: string;
     name: string;
-    brand?: 'Google' | 'OpenAI' | 'Anthropic' | 'DeepSeek' | 'Volcengine' | 'Bailian' | 'ChatGLM' | 'Wenxin' | 'Minimax' | 'Grok' | 'Moonshot' | 'Flux' | 'Ideogram' | 'Fal' | 'Replicate' | 'Midjourney' | 'Other';
+    brand?: 'Google' | 'OpenAI' | 'Anthropic' | 'DeepSeek' | 'Volcengine' | 'Bailian' | 'ChatGLM' | 'Wenxin' | 'Minimax' | 'Grok' | 'Moonshot' | 'Flux' | 'Ideogram' | 'Fal' | 'Replicate' | 'Midjourney' | 'Other'; // cspell:disable-line
     category: 'script' | 'image' | 'video';
     provider?: string;
 }
@@ -34,9 +35,9 @@ const RECOMMENDED_MODELS = {
     script: [
         { id: 'gpt-4o', name: 'GPT-4o', brand: 'OpenAI' },
         { id: 'claude-3-5-sonnet-20240620', name: 'Claude 3.5 Sonnet', brand: 'Anthropic' },
-        { id: 'deepseek-chat', name: 'DeepSeek-V3', brand: 'DeepSeek' },
-        { id: 'deepseek-reasoner', name: 'DeepSeek-R1', brand: 'DeepSeek' },
-        { id: 'doubao-pro-32k', name: '豆包 Pro (火山)', brand: 'Volcengine' },
+        { id: 'deepseek-chat', name: 'DeepSeek-V3', brand: 'DeepSeek' }, // cspell:disable-line
+        { id: 'deepseek-reasoner', name: 'DeepSeek-R1', brand: 'DeepSeek' }, // cspell:disable-line
+        { id: 'doubao-pro-32k', name: '豆包 Pro (火山)', brand: 'Volcengine' }, // cspell:disable-line
         { id: 'gemini-2.0-flash-exp', name: 'Gemini 2.0 Flash', brand: 'Google' },
     ],
     image: [
@@ -44,7 +45,7 @@ const RECOMMENDED_MODELS = {
         { id: 'flux-1.1-pro', name: 'FLUX 1.1 Pro', brand: 'Flux' },
         { id: 'flux-pro', name: 'FLUX Pro', brand: 'Flux' },
         { id: 'ideogram-v2', name: 'Ideogram v2', brand: 'Ideogram' },
-        { id: 'doubao-vision', name: '豆包 视界 (火山)', brand: 'Volcengine' },
+        { id: 'doubao-vision', name: '豆包 视界 (火山)', brand: 'Volcengine' }, // cspell:disable-line
         { id: 'imagen-3', name: 'Imagen 3', brand: 'Google' },
     ],
     video: [
@@ -93,6 +94,7 @@ ModelCard.displayName = 'ModelCard';
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     const [activeTab, setActiveTab] = useState<SettingsTab>('api');
+    const imageHost = useImageHostStore();
     const [providers, setProviders] = useState<ApiProviderConfig[]>([
         { id: 'gemini', name: 'Gemini (原生)', baseUrl: 'https://generativelanguage.googleapis.com', apiKey: '' },
         { id: 'yunwu', name: '云雾 (OpenAI)', baseUrl: 'https://yunwu.ai', apiKey: '' }
@@ -197,11 +199,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                             brand: id.toLowerCase().includes('gpt') ? 'OpenAI' :
                                 id.toLowerCase().includes('gemini') ? 'Google' :
                                     id.toLowerCase().includes('claude') ? 'Anthropic' :
-                                        id.toLowerCase().includes('deepseek') ? 'DeepSeek' :
-                                            (id.toLowerCase().includes('doubao') || id.toLowerCase().includes('volc')) ? 'Volcengine' :
-                                                id.toLowerCase().includes('qw') ? 'Bailian' :
+                                        id.toLowerCase().includes('deepseek') ? 'DeepSeek' : // cspell:disable-line
+                                            (id.toLowerCase().includes('doubao') || id.toLowerCase().includes('volc')) ? 'Volcengine' : // cspell:disable-line
+                                                id.toLowerCase().includes('qw') ? 'Bailian' : // cspell:disable-line
                                                     id.toLowerCase().includes('glm') ? 'ChatGLM' :
-                                                        id.toLowerCase().includes('ernie') ? 'Wenxin' :
+                                                        id.toLowerCase().includes('ernie') ? 'Wenxin' : // cspell:disable-line
                                                             id.toLowerCase().includes('minimax') ? 'Minimax' :
                                                                 id.toLowerCase().includes('grok') ? 'Grok' :
                                                                     id.toLowerCase().includes('moonshot') ? 'Moonshot' :
@@ -210,8 +212,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                                                                                 id.toLowerCase().includes('fal') ? 'Fal' :
                                                                                     id.toLowerCase().includes('replicate') ? 'Replicate' :
                                                                                         id.toLowerCase().includes('midjourney') ? 'Midjourney' : 'Other',
-                            category: (id.toLowerCase().includes('vision') || id.toLowerCase().includes('dall-e') || id.toLowerCase().includes('flux') || id.toLowerCase().includes('imagen') || id.toLowerCase().includes('image') || id.toLowerCase().includes('stable-diffusion') || id.toLowerCase().includes('midjourney') || id.toLowerCase().includes('sdxl') || id.toLowerCase().includes('ideogram') || id.toLowerCase().includes('kolors') || id.toLowerCase().includes('playground') || id.toLowerCase().includes('aura') || id.toLowerCase().includes('recraft')) ? 'image' :
-                                (id.toLowerCase().includes('video') || id.toLowerCase().includes('kling') || id.toLowerCase().includes('hailuo') || id.toLowerCase().includes('veo') || id.toLowerCase().includes('luma') || id.toLowerCase().includes('sora') || id.toLowerCase().includes('pika') || id.toLowerCase().includes('gen-2') || id.toLowerCase().includes('gen-3') || id.toLowerCase().includes('animate')) ? 'video' : 'script',
+                            category: (id.toLowerCase().includes('vision') || id.toLowerCase().includes('dall-e') || id.toLowerCase().includes('flux') || id.toLowerCase().includes('imagen') || id.toLowerCase().includes('image') || id.toLowerCase().includes('stable-diffusion') || id.toLowerCase().includes('midjourney') || id.toLowerCase().includes('sdxl') || id.toLowerCase().includes('ideogram') || id.toLowerCase().includes('kolors') || id.toLowerCase().includes('playground') || id.toLowerCase().includes('aura') || id.toLowerCase().includes('recraft')) ? 'image' : // cspell:disable-line
+                                (id.toLowerCase().includes('video') || id.toLowerCase().includes('kling') || id.toLowerCase().includes('hailuo') || id.toLowerCase().includes('veo') || id.toLowerCase().includes('luma') || id.toLowerCase().includes('sora') || id.toLowerCase().includes('pika') || id.toLowerCase().includes('gen-2') || id.toLowerCase().includes('gen-3') || id.toLowerCase().includes('animate')) ? 'video' : 'script', // cspell:disable-line
                             provider: target.name
                         }));
                         setAvailableModels(formatted);
@@ -252,11 +254,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             if (lowerId.includes('gemini')) brand = 'Google';
             else if (lowerId.includes('gpt')) brand = 'OpenAI';
             else if (lowerId.includes('claude')) brand = 'Anthropic';
-            else if (lowerId.includes('deepseek')) brand = 'DeepSeek';
-            else if (lowerId.includes('doubao') || lowerId.includes('volc')) brand = 'Volcengine';
-            else if (lowerId.includes('qw')) brand = 'Bailian';
+            else if (lowerId.includes('deepseek')) brand = 'DeepSeek'; // cspell:disable-line
+            else if (lowerId.includes('doubao') || lowerId.includes('volc')) brand = 'Volcengine'; // cspell:disable-line
+            else if (lowerId.includes('qw')) brand = 'Bailian'; // cspell:disable-line
             else if (lowerId.includes('glm')) brand = 'ChatGLM';
-            else if (lowerId.includes('ernie')) brand = 'Wenxin';
+            else if (lowerId.includes('ernie')) brand = 'Wenxin'; // cspell:disable-line
             else if (lowerId.includes('grok')) brand = 'Grok';
             else if (lowerId.includes('moonshot')) brand = 'Moonshot';
             else if (lowerId.includes('flux')) brand = 'Flux';
@@ -266,8 +268,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             else if (lowerId.includes('midjourney')) brand = 'Midjourney';
 
             let category: 'script' | 'image' | 'video' = 'script';
-            if (lowerId.includes('vision') || lowerId.includes('dall-e') || lowerId.includes('flux') || lowerId.includes('imagen') || lowerId.includes('image') || lowerId.includes('stable-diffusion') || lowerId.includes('midjourney') || lowerId.includes('sdxl') || lowerId.includes('ideogram') || lowerId.includes('kolors') || lowerId.includes('playground') || lowerId.includes('aura') || lowerId.includes('recraft')) category = 'image';
-            else if (lowerId.includes('video') || lowerId.includes('kling') || lowerId.includes('hailuo') || lowerId.includes('veo') || lowerId.includes('luma') || lowerId.includes('sora') || lowerId.includes('pika') || lowerId.includes('gen-2') || lowerId.includes('gen-3') || lowerId.includes('animate')) category = 'video';
+            if (lowerId.includes('vision') || lowerId.includes('dall-e') || lowerId.includes('flux') || lowerId.includes('imagen') || lowerId.includes('image') || lowerId.includes('stable-diffusion') || lowerId.includes('midjourney') || lowerId.includes('sdxl') || lowerId.includes('ideogram') || lowerId.includes('kolors') || lowerId.includes('playground') || lowerId.includes('aura') || lowerId.includes('recraft')) category = 'image'; // cspell:disable-line
+            else if (lowerId.includes('video') || lowerId.includes('kling') || lowerId.includes('hailuo') || lowerId.includes('veo') || lowerId.includes('luma') || lowerId.includes('sora') || lowerId.includes('pika') || lowerId.includes('gen-2') || lowerId.includes('gen-3') || lowerId.includes('animate')) category = 'video'; // cspell:disable-line
 
             return { id, name: id, brand, category, provider: p.name };
         });
@@ -339,6 +341,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     const tabs: { id: SettingsTab; label: string; icon: any }[] = [
         { id: 'api', label: '服务商配置', icon: Key },
         { id: 'mapping', label: '模型映射', icon: Globe },
+        { id: 'hosting', label: '图床配置', icon: ImageIcon },
         { id: 'advanced', label: '交互设置', icon: Sliders },
         { id: 'storage', label: '缓存磁盘', icon: HardDrive },
         { id: 'about', label: '系统架构', icon: Info },
@@ -608,7 +611,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                                                                                 { id: 'Fal', label: 'Fal' },
                                                                                 { id: 'Replicate', label: 'Replicate' },
                                                                                 { id: 'Midjourney', label: 'Midjourney' },
-                                                                                { id: 'Bailian', label: '阿里百炼' },
+                                                                                { id: 'Bailian', label: '阿里百炼' }, // cspell:disable-line
                                                                                 { id: 'Google', label: 'Google' },
                                                                                 { id: 'DeepSeek', label: 'DeepSeek' },
                                                                                 { id: 'Anthropic', label: 'Anthropic' },
@@ -616,8 +619,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                                                                                 { id: 'Grok', label: 'Grok' },
                                                                                 { id: 'Moonshot', label: '月之暗面' },
                                                                                 { id: 'Minimax', label: 'Minimax' },
-                                                                                { id: 'Volcengine', label: '火山' },
-                                                                                { id: 'Wenxin', label: '文心' }
+                                                                                { id: 'Volcengine', label: '火山' }, // cspell:disable-line
+                                                                                { id: 'Wenxin', label: '文心' } // cspell:disable-line
                                                                             ].map(b => (
                                                                                 <button
                                                                                     key={b.id}
@@ -692,6 +695,102 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                                                     </AnimatePresence>
                                                 </div>
                                             ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {activeTab === 'hosting' && (
+                                    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                        <div className="flex items-center justify-between px-2">
+                                            <div>
+                                                <h4 className="text-sm font-black text-gray-900">图床配置</h4>
+                                                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">Image Hosting Infrastructure</p>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 gap-6">
+                                            {/* ImgBB Provider */}
+                                            <div className="bg-white border border-gray-100 rounded-[1.5rem] p-8 shadow-sm hover:shadow-md transition-all">
+                                                <div className="flex items-center justify-between mb-8">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="w-12 h-12 bg-orange-50 text-orange-600 rounded-2xl flex items-center justify-center">
+                                                            <ImageIcon size={24} />
+                                                        </div>
+                                                        <div>
+                                                            <h5 className="font-black text-gray-900 leading-none">ImgBB (推荐)</h5> {/* cspell:disable-line */}
+                                                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">Free API Hosting</p>
+                                                        </div>
+                                                    </div>
+                                                    <SettingsToggle 
+                                                        active={imageHost.selectedProvider === 'imgbb'} // cspell:disable-line
+                                                        onClick={() => imageHost.actions.setSelectedProvider(imageHost.selectedProvider === 'imgbb' ? 'none' : 'imgbb')} // cspell:disable-line
+                                                    />
+                                                </div>
+                                                <div className="space-y-4">
+                                                    <div className="text-xs font-black text-gray-800 ml-1">API Key</div>
+                                                    <SettingsInput 
+                                                        type="password" 
+                                                        value={imageHost.imgbbKey} // cspell:disable-line
+                                                        onChange={(e) => imageHost.actions.setImgbbKey(e.target.value)} // cspell:disable-line
+                                                        placeholder="从 imgbb.com 获取您的 API Key" // cspell:disable-line
+                                                    />
+                                                    <p className="text-[10px] text-gray-400 px-1 italic">上传用于多模态识别的临时图片，主要用于「视觉读取」功能。ImgBB 提供免费额度，适合直接配置使用。</p> {/* cspell:disable-line */}
+                                                </div>
+                                            </div>
+
+                                            {/* Custom Provider */}
+                                            <div className="bg-white border border-gray-100 rounded-[1.5rem] p-8 shadow-sm hover:shadow-md transition-all">
+                                                <div className="flex items-center justify-between mb-8">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center">
+                                                            <LinkIcon size={24} />
+                                                        </div>
+                                                        <div>
+                                                            <h5 className="font-black text-gray-900 leading-none">自定义接口</h5>
+                                                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">Custom HTTP API</p>
+                                                        </div>
+                                                    </div>
+                                                    <SettingsToggle 
+                                                        active={imageHost.selectedProvider === 'custom'} 
+                                                        onClick={() => imageHost.actions.setSelectedProvider(imageHost.selectedProvider === 'custom' ? 'none' : 'custom')} 
+                                                    />
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-6">
+                                                    <div className="space-y-2">
+                                                        <div className="text-xs font-black text-gray-800 ml-1">上传地址 (URL)</div>
+                                                        <SettingsInput 
+                                                            value={imageHost.customConfig.uploadUrl} 
+                                                            onChange={(e) => imageHost.actions.setCustomConfig({ uploadUrl: e.target.value })} 
+                                                            placeholder="https://your-api.com/upload" 
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <div className="text-xs font-black text-gray-800 ml-1">API Key / Token</div>
+                                                        <SettingsInput 
+                                                            type="password"
+                                                            value={imageHost.customConfig.apiKey} 
+                                                            onChange={(e) => imageHost.actions.setCustomConfig({ apiKey: e.target.value })} 
+                                                            placeholder="密钥字符" 
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <div className="text-xs font-black text-gray-800 ml-1">响应解析路径 (JSON Path)</div>
+                                                        <SettingsInput 
+                                                            value={imageHost.customConfig.responsePath} // cspell:disable-line
+                                                            onChange={(e) => imageHost.actions.setCustomConfig({ responsePath: e.target.value })} // cspell:disable-line
+                                                            placeholder="例如 data.url" 
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <div className="text-xs font-black text-gray-800 ml-1">文件参数名 (Para Name)</div>
+                                                        <SettingsInput 
+                                                            value={imageHost.customConfig.fileParamName} // cspell:disable-line
+                                                            onChange={(e) => imageHost.actions.setCustomConfig({ fileParamName: e.target.value })} // cspell:disable-line
+                                                            placeholder="默认为 image" 
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 )}

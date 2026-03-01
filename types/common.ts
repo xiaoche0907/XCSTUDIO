@@ -54,6 +54,8 @@ export interface CanvasElement {
   width: number;
   height: number;
   zIndex: number;
+  isLocked?: boolean;
+  isHidden?: boolean;
 
   // Group support
   groupId?: string;
@@ -63,7 +65,7 @@ export interface CanvasElement {
 }
 
 export interface Marker {
-  id: number;
+  id: string;
   x: number; // Relative to the element
   y: number; // Relative to the element
   elementId: string;
@@ -97,7 +99,7 @@ export interface ChatMessage {
   text: string;
   timestamp: number;
   attachments?: string[]; // Array of base64 images
-  relatedMarkerId?: number;
+  relatedMarkerId?: string;
   // Agent structured data (Lovart-style)
   agentData?: {
     model?: string;

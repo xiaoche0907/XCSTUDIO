@@ -10,26 +10,26 @@ interface SettingsCardProps {
 
 export const SettingsCard: React.FC<SettingsCardProps> = ({ title, description, icon, children, badge }) => {
     return (
-        <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-300">
-            <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-3">
-                    <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl">
+        <div className="bg-card border border-border/60 rounded-lg p-6 shadow-premium hover:shadow-hover transition-all duration-300">
+            <div className="flex items-start justify-between mb-6">
+                <div className="flex items-center gap-4">
+                    <div className="p-3 bg-primary/5 text-primary rounded-md ring-1 ring-primary/10">
                         {icon}
                     </div>
                     <div>
-                        <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                        <h3 className="text-lg font-display font-semibold text-foreground tracking-tight flex items-center gap-2">
                             {title}
                             {badge && (
-                                <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-600 text-[10px] uppercase font-bold tracking-wider">
+                                <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] uppercase font-bold tracking-wider">
                                     {badge}
                                 </span>
                             )}
                         </h3>
-                        {description && <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{description}</p>}
+                        {description && <p className="text-xs text-muted-foreground mt-1 leading-relaxed max-w-sm">{description}</p>}
                     </div>
                 </div>
             </div>
-            <div className="space-y-4 pt-1 border-t border-gray-50">
+            <div className="space-y-5 pt-4 border-t border-border/40">
                 {children}
             </div>
         </div>

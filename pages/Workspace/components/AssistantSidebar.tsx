@@ -7,7 +7,7 @@ import {
 import { useAgentStore } from '../../../stores/agent.store';
 import { MessageList } from './MessageList';
 import { InputArea } from './InputArea';
-import { ConversationSession, ImageModel, VideoModel } from '../../../types';
+import { ConversationSession, ImageModel, VideoModel, Marker } from '../../../types';
 
 interface AssistantSidebarProps {
     showAssistant: boolean;
@@ -55,6 +55,7 @@ interface AssistantSidebarProps {
     setIsVideoPanelHovered: (v: boolean) => void;
     showVideoSettingsDropdown: boolean;
     setShowVideoSettingsDropdown: (v: boolean) => void;
+    markers: Marker[];
 }
 
 export const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
@@ -77,6 +78,7 @@ export const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
     isDragOver, setIsDragOver,
     isVideoPanelHovered, setIsVideoPanelHovered,
     showVideoSettingsDropdown, setShowVideoSettingsDropdown,
+    markers,
 }) => {
     const messages = useAgentStore(s => s.messages);
     const { setMessages, clearMessages, setIsAgentMode } = useAgentStore(s => s.actions);
@@ -364,6 +366,7 @@ export const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
                 setIsVideoPanelHovered={setIsVideoPanelHovered}
                 showVideoSettingsDropdown={showVideoSettingsDropdown}
                 setShowVideoSettingsDropdown={setShowVideoSettingsDropdown}
+                markers={markers}
             />
         </motion.div>
     );

@@ -25,9 +25,13 @@ const modelToImageProvider: Record<string, string> = {
 
 const modelToVideoProvider: Record<string, string> = {
   'Veo 3.1': 'gemini',
+  'Veo 3.1 Pro': 'gemini',
   'Veo 3.1 Fast': 'gemini',
+  'Auto': 'gemini',
   'Kling Standard': 'kling',
   'Kling Pro': 'kling',
+  'Kling 2.0': 'kling',
+  'Kling 2.6': 'kling',
 };
 
 export function getAvailableImageModels(): string[] {

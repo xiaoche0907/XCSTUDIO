@@ -40,6 +40,7 @@ export interface AgentTask {
   input: {
     message: string;
     attachments?: File[];
+    uploadedAttachments?: string[]; // 已上传到图床的公网 URL
     context: ProjectContext;
     metadata?: Record<string, any>;
   };

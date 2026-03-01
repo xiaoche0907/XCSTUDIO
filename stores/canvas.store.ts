@@ -44,7 +44,7 @@ interface CanvasState {
     
     // 标记操作
     addMarker: (marker: Marker) => void;
-    removeMarker: (id: number) => void;
+    removeMarker: (id: string) => void;
     setMarkers: (markers: Marker[]) => void;
     
     // 历史操作
@@ -168,9 +168,7 @@ export const useCanvasStore = create<CanvasState>()(
       }),
       
       removeMarker: (id) => set((state) => {
-        state.markers = state.markers
-          .filter(m => m.id !== id)
-          .map((m, i) => ({ ...m, id: i + 1 }));
+        state.markers = state.markers.filter(m => m.id !== id);
       }),
       
       setMarkers: (markers) => set({ markers }),

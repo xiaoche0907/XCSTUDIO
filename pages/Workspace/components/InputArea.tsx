@@ -3,10 +3,12 @@ import ReactDOM from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     ChevronDown, Plus, X, ArrowUp, Paperclip, Lightbulb, Zap, Globe, Box, Sparkles,
-    Image as ImageIcon, Check, Video, FileText, Banana, ChevronLeft, ChevronRight
+    Image as ImageIcon, Check, Video, FileText, Banana, ChevronLeft, ChevronRight,
+    Activity, Layers, Cloud, ShieldCheck, Monitor
 } from 'lucide-react';
 import { useAgentStore } from '../../../stores/agent.store';
-import { ImageModel, VideoModel } from '../../../types';
+import { useCanvasStore } from '../../../stores/canvas.store';
+import { ImageModel, VideoModel, Marker } from '../../../types';
 
 const VIDEO_RATIOS = [
     { label: '16:9', value: '16:9', icon: 'rectangle-horizontal' },
@@ -14,21 +16,37 @@ const VIDEO_RATIOS = [
     { label: '1:1', value: '1:1', icon: 'square' },
 ];
 
-const MODEL_OPTIONS: Record<string, { id: string; name: string; desc: string; time: string }[]> = {
+const MODEL_OPTIONS: Record<string, { id: string; name: string; desc: string; time?: string; icon: React.ElementType; badge?: string }[]> = {
     image: [
-        { id: 'NanoBanana2', name: 'Nano Banana 2', desc: '新款高性能图像生成模型', time: '~8s' },
-        { id: 'Seedream5.0', name: 'Seedream 5.0', desc: '超强意图理解与构图', time: '~10s' },
-        { id: 'Nano Banana Pro', name: 'Nano Banana Pro', desc: '高质量图像生成，细节丰富', time: '~20s' },
-        { id: 'GPT Image 1.5', name: 'GPT Image 1.5', desc: '创意图像生成，风格多样', time: '~120s' },
-        { id: 'Flux.2 Max', name: 'Flux.2 Max', desc: '快速图像生成，效率优先', time: '~10s' },
+        { id: 'Nano Banana Pro', name: 'Nano Banana Pro', desc: "Professional's choice for advanced outputs.", time: '20s', icon: Banana },
+        { id: 'NanoBanana2', name: 'Nano Banana 2', desc: 'Generalist fast image generation model.', time: '15s', icon: Zap },
+        { id: 'GPT Image 1.5', name: 'GPT Image 1.5', desc: "OpenAI's most advanced image model.", time: '120s', icon: Sparkles },
+        { id: 'Seedream5.0', name: 'Seedream 5.0 Lite', desc: "Bytedance's latest image generation model.", time: '120s', icon: Activity },
+        { id: 'Flux.2 Max', name: 'Flux.2 Max', desc: "BFL's image generation model.", time: '10s', icon: Layers },
+        { id: 'Flux.2 Pro', name: 'Flux.2 Pro', desc: "BFL's image generation model.", time: '10s', icon: Layers },
+        { id: 'Seedream 4.5', name: 'Seedream 4.5', desc: "Bytedance's latest image generation model.", time: '10s', icon: Activity },
+        { id: 'Nano Banana', name: 'Nano Banana', desc: "Google's image generation model.", time: '20s', icon: Banana },
+        { id: 'Seedream 4', name: 'Seedream 4', desc: "Bytedance's latest image generation model.", time: '10s', icon: Activity },
+        { id: 'Gemini Imagen 4', name: 'Gemini Imagen 4', desc: "Google's most advanced image model.", time: '10s', icon: Sparkles },
+        { id: 'Midjourney', name: 'Midjourney', desc: 'A model that transforms text into artistic visuals.', time: '20s', icon: Globe },
     ],
     video: [
-        { id: 'Veo 3.1', name: 'Veo 3.1', desc: '高质量视频生成', time: '~60s' },
-        { id: 'Veo 3.1 Fast', name: 'Veo 3.1 Fast', desc: '快速视频生成', time: '~30s' },
-        { id: 'Kling 2.0', name: 'Kling 2.0', desc: '运动流畅的视频生成', time: '~45s' },
+        { id: 'Kling 3.0', name: 'Kling 3.0', desc: "Kling's latest video model.", time: '300s', icon: Video, badge: '蓝海5型' },
+        { id: 'Kling 3.0 Omni', name: 'Kling 3.0 Omni', desc: "Kling's latest video model.", time: '300s', icon: Video, badge: '蓝海5型' },
+        { id: 'Seedance 1.5 Pro', name: 'Seedance 1.5 Pro', desc: "Bytedance's latest video generation model.", time: '300s', icon: Activity },
+        { id: 'Kling 2.8', name: 'Kling 2.8', desc: "Kling's video model with integrated audio.", time: '300s', icon: Video, badge: '蓝海5型' },
+        { id: 'Wan 2.6', name: 'Wan 2.6', desc: 'Video generation model with built-in audio.', time: '600s', icon: Activity },
+        { id: 'Sora 2 Pro', name: 'Sora 2 Pro', desc: "OpenAI's flagship video generation model with synced audio.", time: '300s', icon: Sparkles, badge: '通联专网' },
+        { id: 'Sora 2', name: 'Sora 2', desc: "OpenAI's flagship video generation model with synced audio.", time: '300s', icon: Sparkles, badge: '通联专网' },
+        { id: 'Veo 3.1', name: 'Veo 3.1', desc: "Google's latest video model with integrated audio and visuals.", time: '180s', icon: Cloud, badge: '蓝海5型' },
+        { id: 'Veo 3.1 Fast', name: 'Veo 3.1 Fast', desc: "Google's latest video model with integrated audio and visuals.", time: '180s', icon: Cloud, badge: '蓝海5型' },
+        { id: 'Kling 01', name: 'Kling 01', desc: "Kling's video model.", time: '300s', icon: Video, badge: '会员专属' },
+        { id: 'Hailuo 2.3', name: 'Hailuo 2.3', desc: "Hailuo's latest video model.", time: '180s', icon: Activity },
+        { id: 'Veo 3', name: 'Veo 3', desc: "Google's video model with integrated audio and visuals.", time: '180s', icon: Cloud, badge: '通联专网' },
+        { id: 'Vidu Q2', name: 'Vidu Q2', desc: "Vidu's latest video model.", time: '300s', icon: Activity },
     ],
     '3d': [
-        { id: 'Auto', name: 'Auto', desc: '自动选择最佳3D模型', time: '~30s' },
+        { id: 'Tripo', name: 'Tripo', desc: 'High-quality 3D model generator.', icon: Box },
     ]
 };
 
@@ -106,6 +124,7 @@ interface InputAreaProps {
     setIsVideoPanelHovered: (v: boolean) => void;
     showVideoSettingsDropdown: boolean;
     setShowVideoSettingsDropdown: (v: boolean) => void;
+    markers: any[];
 }
 
 export const InputArea: React.FC<InputAreaProps> = ({
@@ -124,6 +143,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
     isDragOver, setIsDragOver,
     isVideoPanelHovered, setIsVideoPanelHovered,
     showVideoSettingsDropdown, setShowVideoSettingsDropdown,
+    markers,
 }) => {
     const inputBlocks = useAgentStore(s => s.inputBlocks);
     const activeBlockId = useAgentStore(s => s.activeBlockId);
@@ -183,12 +203,22 @@ export const InputArea: React.FC<InputAreaProps> = ({
 
                 {/* Image Mode: Upload Area */}
                 {creationMode === 'image' && (
-                    <div className={`transition-all duration-300 overflow-hidden px-4 flex flex-col justify-end`} style={{ maxHeight: isVideoPanelHovered ? '80px' : '0px', opacity: isVideoPanelHovered ? 1 : 0, paddingTop: isVideoPanelHovered ? '16px' : '0px', paddingBottom: isVideoPanelHovered ? '8px' : '0px' }}>
+                    <div className={`transition-all duration-300 overflow-hidden px-4 flex flex-col justify-end`} style={{ maxHeight: isVideoPanelHovered ? '92px' : '0px', opacity: isVideoPanelHovered ? 1 : 0, paddingTop: isVideoPanelHovered ? '16px' : '0px', paddingBottom: isVideoPanelHovered ? '4px' : '0px' }}>
                         <div
-                            onClick={() => fileInputRef.current?.click()}
-                            className="w-14 h-14 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition group/upload"
+                            onClick={() => {
+                                const input = document.createElement('input');
+                                input.type = 'file';
+                                input.accept = 'image/*';
+                                input.onchange = (e) => {
+                                    const file = (e.target as HTMLInputElement).files?.[0];
+                                    if (file) insertInputFile(file);
+                                };
+                                input.click();
+                            }}
+                            className="w-[72px] h-[72px] border border-dashed border-gray-200 rounded-[14px] flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition group/upload shrink-0 bg-gray-50/50"
                         >
-                            <Plus size={16} className="text-gray-400 group-hover/upload:text-blue-500 transition" />
+                            <Plus size={20} strokeWidth={1.5} className="text-gray-300 group-hover/upload:text-blue-500 transition mb-1" />
+                            <span className="text-[12px] font-bold text-gray-400 group-hover/upload:text-blue-500 transition">图片</span>
                         </div>
                     </div>
                 )}
@@ -198,46 +228,46 @@ export const InputArea: React.FC<InputAreaProps> = ({
                     <div
                         className="px-4 transition-all duration-300 overflow-hidden flex flex-col justify-end"
                         style={{
-                            maxHeight: (isVideoPanelHovered || videoStartFrame || videoEndFrame || videoMultiRefs.length > 0) ? '100px' : '0px',
+                            maxHeight: (isVideoPanelHovered || videoStartFrame || videoEndFrame || videoMultiRefs.length > 0) ? '140px' : '0px',
                             opacity: (isVideoPanelHovered || videoStartFrame || videoEndFrame || videoMultiRefs.length > 0) ? 1 : 0,
-                            paddingTop: (isVideoPanelHovered || videoStartFrame || videoEndFrame || videoMultiRefs.length > 0) ? '16px' : '0px',
-                            paddingBottom: (isVideoPanelHovered || videoStartFrame || videoEndFrame || videoMultiRefs.length > 0) ? '8px' : '0px',
+                            paddingTop: (isVideoPanelHovered || videoStartFrame || videoEndFrame || videoMultiRefs.length > 0) ? '20px' : '0px',
+                            paddingBottom: (isVideoPanelHovered || videoStartFrame || videoEndFrame || videoMultiRefs.length > 0) ? '10px' : '0px',
                         }}
                     >
                         {videoGenMode === 'startEnd' ? (
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-4">
                                 <div className="relative">
-                                    <label className={`w-14 h-14 border rounded-xl flex flex-col items-center justify-center cursor-pointer transition overflow-hidden group/upload ${videoStartFrame ? 'border-gray-200 border-solid shadow-sm' : 'border-2 border-dashed border-gray-300 hover:border-blue-400 hover:bg-blue-50/50'}`}>
+                                    <label className={`w-[72px] h-[72px] border rounded-[14px] flex flex-col items-center justify-center cursor-pointer transition overflow-hidden group/upload ${videoStartFrame ? 'border-gray-200 border-solid shadow-sm' : 'border border-dashed border-gray-200 bg-gray-50/50 hover:border-blue-400 hover:bg-blue-50/30'}`}>
                                         <input type="file" accept="image/*" className="hidden" onChange={e => { if (e.target.files) setVideoStartFrame(e.target.files[0]); }} />
                                         {videoStartFrame ? (
                                             <img src={URL.createObjectURL(videoStartFrame)} className="w-full h-full object-cover" />
                                         ) : (
                                             <>
-                                                <Plus size={16} className="text-gray-400 group-hover/upload:text-blue-500 transition" />
-                                                <span className="text-[10px] text-gray-400 group-hover/upload:text-blue-500 mt-0.5">首帧</span>
+                                                <Plus size={20} strokeWidth={1.5} className="text-gray-300 group-hover/upload:text-blue-500 transition mb-1" />
+                                                <span className="text-[12px] font-bold text-gray-400 group-hover/upload:text-blue-500 transition">首帧</span>
                                             </>
                                         )}
                                     </label>
                                     {videoStartFrame && (
-                                        <button onClick={(e) => { e.preventDefault(); setVideoStartFrame(null); }} className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-gray-600 hover:bg-gray-800 text-white rounded-full flex items-center justify-center z-10 shadow border border-white">
+                                        <button onClick={(e) => { e.preventDefault(); setVideoStartFrame(null); }} className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-black/80 hover:bg-black text-white rounded-full flex items-center justify-center z-10 shadow-sm border border-white/20">
                                             <X size={10} />
                                         </button>
                                     )}
                                 </div>
                                 <div className="relative">
-                                    <label className={`w-14 h-14 border rounded-xl flex flex-col items-center justify-center cursor-pointer transition overflow-hidden group/upload ${videoEndFrame ? 'border-gray-200 border-solid shadow-sm' : 'border-2 border-dashed border-gray-300 hover:border-blue-400 hover:bg-blue-50/50'}`}>
+                                    <label className={`w-[72px] h-[72px] border rounded-[14px] flex flex-col items-center justify-center cursor-pointer transition overflow-hidden group/upload ${videoEndFrame ? 'border-gray-200 border-solid shadow-sm' : 'border border-dashed border-gray-200 bg-gray-50/50 hover:border-blue-400 hover:bg-blue-50/30'}`}>
                                         <input type="file" accept="image/*" className="hidden" onChange={e => { if (e.target.files) setVideoEndFrame(e.target.files[0]); }} />
                                         {videoEndFrame ? (
                                             <img src={URL.createObjectURL(videoEndFrame)} className="w-full h-full object-cover" />
                                         ) : (
                                             <>
-                                                <Plus size={16} className="text-gray-400 group-hover/upload:text-blue-500 transition" />
-                                                <span className="text-[10px] text-gray-400 group-hover/upload:text-blue-500 mt-0.5">尾帧</span>
+                                                <Plus size={20} strokeWidth={1.5} className="text-gray-300 group-hover/upload:text-blue-500 transition mb-1" />
+                                                <span className="text-[12px] font-bold text-gray-400 group-hover/upload:text-blue-500 transition">尾帧</span>
                                             </>
                                         )}
                                     </label>
                                     {videoEndFrame && (
-                                        <button onClick={(e) => { e.preventDefault(); setVideoEndFrame(null); }} className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-gray-600 hover:bg-gray-800 text-white rounded-full flex items-center justify-center z-10 shadow border border-white">
+                                        <button onClick={(e) => { e.preventDefault(); setVideoEndFrame(null); }} className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-black/80 hover:bg-black text-white rounded-full flex items-center justify-center z-10 shadow-sm border border-white/20">
                                             <X size={10} />
                                         </button>
                                     )}
@@ -273,7 +303,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
                         el?.focus();
                     }
                 }}>
-                    <div className="input-flow-container flex flex-wrap items-center gap-1.5" style={{ minHeight: '28px', wordBreak: 'break-word', lineHeight: '28px' }}>
+                    <div className="input-flow-container flex flex-wrap items-center gap-[2px]" style={{ minHeight: '24px', wordBreak: 'break-word', lineHeight: '24px' }}>
                         {inputBlocks.map((block) => {
                             if (block.type === 'file' && block.file) {
                                 const file = block.file!;
@@ -284,54 +314,108 @@ export const InputArea: React.FC<InputAreaProps> = ({
 
                                 if (markerId) {
                                     return (
-                                        <motion.div
-                                            key={block.id}
-                                            id={`marker-chip-${block.id}`}
-                                            initial={{ scale: 0, opacity: 0 }}
-                                            animate={{ scale: 1, opacity: 1 }}
-                                            className={`inline-flex items-center gap-1.5 rounded-lg pl-1 pr-2 cursor-default relative group select-none h-7 transition-all border ${isSelected ? 'bg-blue-50 border-blue-200 ring-1 ring-blue-500' : 'bg-white border-gray-200 hover:bg-gray-50'}`}
-                                            onClick={(e) => { e.stopPropagation(); setSelectedChipId(isSelected ? null : block.id); }}
-                                            onMouseEnter={() => setHoveredChipId(block.id)}
-                                            onMouseLeave={() => setHoveredChipId(null)}
-                                        >
-                                            <div className="flex items-center">
-                                                <div className="w-[22px] h-[22px] rounded-[4px] overflow-hidden border border-gray-200 flex-shrink-0">
-                                                    <img src={URL.createObjectURL(file)} className="w-full h-full object-cover" />
+                                            <motion.div
+                                                key={block.id}
+                                                id={`marker-chip-${block.id}`}
+                                                initial={{ scale: 0, opacity: 0 }}
+                                                animate={{ scale: 1, opacity: 1 }}
+                                                className={`inline-flex items-center gap-0 rounded-full pl-[2px] pr-1 cursor-default relative group select-none h-6 transition-all border ${isSelected ? 'bg-blue-50 border-blue-300 ring-1 ring-blue-400' : 'bg-gray-50/50 border-gray-100 hover:bg-gray-100'}`}
+                                                onClick={(e) => { e.stopPropagation(); setSelectedChipId(isSelected ? null : block.id); }}
+                                                onMouseEnter={() => setHoveredChipId(block.id)}
+                                                onMouseLeave={() => setHoveredChipId(null)}
+                                            >
+                                                <div className="flex items-center -space-x-1.5 flex-shrink-0">
+                                                    <div className="w-5 h-5 rounded-full overflow-hidden border border-gray-100 flex-shrink-0 shadow-sm">
+                                                        <img src={URL.createObjectURL(file)} className="w-full h-full object-cover" />
+                                                    </div>
+                                                    <div className="w-3.5 h-3.5 bg-[#3B82F6] rounded-full flex items-center justify-center text-white text-[8px] font-black shadow-sm flex-shrink-0 border border-white z-10">
+                                                        {markers.findIndex(m => m.id === markerId) + 1 || '?'}
+                                                    </div>
                                                 </div>
-                                                <div className="w-[14px] h-[14px] bg-[#3B82F6] rounded-full flex items-center justify-center text-white text-[7px] font-bold shadow-sm flex-shrink-0 border border-white -ml-2 z-10">
-                                                    {markerId}
-                                                </div>
-                                            </div>
-                                            <span className="text-[12px] text-gray-700 font-medium max-w-[80px] truncate ml-0.5">{(file as any).markerName || '区域'}</span>
-                                            <ChevronDown size={14} className="text-gray-400" />
-                                            <button onClick={(e) => { e.stopPropagation(); removeInputBlock(block.id); setSelectedChipId(null); }} className="absolute -top-1.5 -right-1.5 bg-gray-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition shadow-sm z-20 hover:bg-gray-700"><X size={8} /></button>
+                                                <span className="text-[11px] text-gray-700 font-bold max-w-[80px] truncate ml-1">{(file as any).markerName || '区域'}</span>
+                                                <button onClick={(e) => { e.stopPropagation(); removeInputBlock(block.id); setSelectedChipId(null); }} className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition opacity-0 group-hover:opacity-100"><X size={10} /></button>
 
-                                            {isHovered && markerInfo && ReactDOM.createPortal(
-                                                <div className="fixed z-[9999] pointer-events-none" style={{
-                                                    left: (document.getElementById(`marker-chip-${block.id}`)?.getBoundingClientRect().left || 0) + (document.getElementById(`marker-chip-${block.id}`)?.getBoundingClientRect().width || 0) / 2 - 80,
-                                                    top: (document.getElementById(`marker-chip-${block.id}`)?.getBoundingClientRect().top || 0) - 172,
-                                                    width: 160, height: 160
-                                                }}>
-                                                    <motion.div initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} className="w-full h-full bg-white rounded-2xl shadow-xl overflow-hidden relative border border-gray-200">
-                                                        <motion.div className="absolute inset-0" initial={{ scale: 1 }} animate={{ scale: 2.5 }} style={{ transformOrigin: `${(markerInfo.x + markerInfo.width / 2) / markerInfo.imageWidth * 100}% ${(markerInfo.y + markerInfo.height / 2) / markerInfo.imageHeight * 100}%` }}>
+                                            {isHovered && markerInfo && (() => {
+                                                const MAX_SIZE = 220;
+                                                const ratio = markerInfo.imageWidth / markerInfo.imageHeight;
+                                                let renderWidth = MAX_SIZE;
+                                                let renderHeight = MAX_SIZE;
+                                                
+                                                if (ratio > 1) {
+                                                    renderHeight = MAX_SIZE / ratio;
+                                                } else {
+                                                    renderWidth = MAX_SIZE * ratio;
+                                                }
+
+                                                return ReactDOM.createPortal(
+                                                    <div className="fixed z-[9999] pointer-events-none" style={{
+                                                        left: (document.getElementById(`marker-chip-${block.id}`)?.getBoundingClientRect().left || 0) + (document.getElementById(`marker-chip-${block.id}`)?.getBoundingClientRect().width || 0) / 2 - (renderWidth / 2),
+                                                        top: (document.getElementById(`marker-chip-${block.id}`)?.getBoundingClientRect().top || 0) - renderHeight - 12,
+                                                        width: renderWidth, height: renderHeight
+                                                    }}>
+                                                    <motion.div
+                                                        initial={{ opacity: 0, scale: 0.9, y: 8 }}
+                                                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                                                        transition={{ duration: 0.2 }}
+                                                        className="w-full h-full bg-white rounded-2xl shadow-xl overflow-hidden relative border border-gray-200"
+                                                    >
+                                                        {/* 先显示完整原图（scale=1），再动画缩放到标记区域（scale=3） */}
+                                                        <motion.div
+                                                            className="absolute inset-0"
+                                                            initial={{ scale: 1 }}
+                                                            animate={{ scale: 3 }}
+                                                            transition={{
+                                                                delay: 0.5,
+                                                                duration: 0.8,
+                                                                ease: [0.25, 0.1, 0.25, 1]
+                                                            }}
+                                                            style={{
+                                                                transformOrigin: `${(markerInfo.x + markerInfo.width / 2) / markerInfo.imageWidth * 100}% ${(markerInfo.y + markerInfo.height / 2) / markerInfo.imageHeight * 100}%`
+                                                            }}
+                                                        >
                                                             <img src={markerInfo.fullImageUrl || URL.createObjectURL(file)} className="w-full h-full object-cover" />
+                                                            {/* 在图片上覆盖绘制对应的标记点 */}
+                                                            <div 
+                                                                className="absolute"
+                                                                style={{
+                                                                    left: `${(markerInfo.x + markerInfo.width / 2) / markerInfo.imageWidth * 100}%`,
+                                                                    top: `${(markerInfo.y + markerInfo.height / 2) / markerInfo.imageHeight * 100}%`,
+                                                                    transform: 'translate(-50%, -100%)',
+                                                                    transformOrigin: 'bottom center'
+                                                                }}
+                                                            >
+                                                                <motion.div 
+                                                                     className="relative flex flex-col items-center"
+                                                                     // 因为外层最终会放大到 scale=3，我们让标记反向缩小到 scale: 0.33，这样它在放大状态下刚好是正常大小
+                                                                     initial={{ scale: 1, opacity: 0 }}
+                                                                     animate={{ scale: 0.333, opacity: 1 }}
+                                                                     transition={{ delay: 0.5, duration: 0.8, ease: [0.25, 0.1, 0.25, 1] }}
+                                                                     style={{ transformOrigin: 'bottom center' }}
+                                                                >
+                                                                    <div className="w-[28px] h-[28px] rounded-full bg-[#3B82F6] border-2 border-white flex items-center justify-center text-white font-bold text-[12px] relative z-10 shadow-lg">
+                                                                        {markers.findIndex(m => m.id === markerId) + 1}
+                                                                    </div>
+                                                                    <div className="w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[6px] border-t-[#3B82F6] -mt-[1px]"></div>
+                                                                </motion.div>
+                                                            </div>
                                                         </motion.div>
                                                     </motion.div>
                                                 </div>,
                                                 document.body
-                                            )}
+                                                );
+                                            })()}
                                         </motion.div>
                                     );
                                 } else {
                                     const isCanvasAuto = (file as any)._canvasAutoInsert;
                                     const chipLabel = isCanvasAuto ? `图片${inputBlocks.filter(b => b.type === 'file' && (b.file as any)?._canvasAutoInsert).indexOf(block) + 1}` : file.name.replace(/\.[^/.]+$/, '');
                                     return (
-                                        <div key={block.id} className={`inline-flex items-center gap-1 rounded-lg pl-1 pr-1.5 select-none relative group h-7 cursor-default transition-all border shrink-0 ${isSelected ? 'bg-blue-50 border-blue-200 ring-1 ring-blue-500' : isInputFocused ? 'bg-gray-100 border-gray-200' : 'bg-gray-50 border-gray-100'}`} onClick={(e) => { e.stopPropagation(); setSelectedChipId(isSelected ? null : block.id); }}>
-                                            <div className="w-5 h-5 rounded-sm overflow-hidden flex-shrink-0">
-                                                {file.type.startsWith('image/') ? <img src={URL.createObjectURL(file)} className="w-full h-full object-cover" /> : <FileText size={12} className="text-gray-500" />}
+                                        <div key={block.id} className={`inline-flex items-center gap-1 rounded-full pl-[2px] pr-1.5 select-none relative group h-6 cursor-default transition-all border shrink-0 ${isSelected ? 'bg-blue-50 border-blue-300 ring-1 ring-blue-400' : isInputFocused ? 'bg-blue-50/30 border-blue-100' : 'bg-gray-50/50 border-gray-100 hover:bg-gray-100'}`} onClick={(e) => { e.stopPropagation(); setSelectedChipId(isSelected ? null : block.id); }}>
+                                            <div className="w-5 h-5 rounded-full overflow-hidden flex-shrink-0 border border-gray-100 shadow-sm">
+                                                {file.type.startsWith('image/') ? <img src={URL.createObjectURL(file)} className="w-full h-full object-cover" /> : <FileText size={10} className="text-gray-500" />}
                                             </div>
-                                            <span className="text-[11px] text-gray-600 font-medium max-w-[100px] truncate">{chipLabel}</span>
-                                            <button onClick={(e) => { e.stopPropagation(); removeInputBlock(block.id); setSelectedChipId(null); }} className="w-4 h-4 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-black/10 transition opacity-0 group-hover:opacity-100"><X size={10} /></button>
+                                            <span className="text-[11px] text-gray-700 font-bold max-w-[100px] truncate ml-0.5">{chipLabel}</span>
+                                            <button onClick={(e) => { e.stopPropagation(); removeInputBlock(block.id); setSelectedChipId(null); }} className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition opacity-0 group-hover:opacity-100 ml-0.5"><X size={10} /></button>
                                         </div>
                                     );
                                 }
@@ -350,13 +434,107 @@ export const InputArea: React.FC<InputAreaProps> = ({
                                         suppressContentEditableWarning
                                         className="ce-placeholder outline-none text-sm text-gray-800"
                                         data-placeholder={placeholder}
-                                        style={{ display: 'block', lineHeight: '28px', whiteSpace: 'pre-wrap', wordBreak: 'break-word', caretColor: '#111827', minWidth: '2px', flex: isLastTextBlock ? '1 1 auto' : '0 1 auto' }}
+                                        style={{ display: 'inline-block', verticalAlign: 'middle', lineHeight: '24px', whiteSpace: 'pre-wrap', wordBreak: 'break-all', caretColor: '#111827', minWidth: '2px', flex: isLastTextBlock ? '1 1 auto' : '0 1 auto' }}
                                         ref={el => { if (el && document.activeElement !== el && el.textContent !== (block.text || '')) el.textContent = block.text || ''; }}
-                                        onInput={(e) => setInputBlocks(useAgentStore.getState().inputBlocks.map(b => b.id === block.id ? { ...b, text: e.currentTarget.textContent || '' } : b))}
+                                        onInput={(e) => {
+                                            setInputBlocks(useAgentStore.getState().inputBlocks.map(b => b.id === block.id ? { ...b, text: e.currentTarget.textContent || '' } : b));
+                                            if (selectedChipId) setSelectedChipId(null);
+                                        }}
                                         onFocus={() => { setActiveBlockId(block.id); setIsInputFocused(true); }}
                                         onBlur={() => setIsInputFocused(false)}
                                         onKeyDown={(e) => {
                                             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); return; }
+                                            
+                                            // 任何普通按键输入都取消选中
+                                            if (selectedChipId && !['ArrowLeft', 'ArrowRight', 'Backspace', 'Delete', 'Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) {
+                                                setSelectedChipId(null);
+                                            }
+                                            
+                                            const selection = window.getSelection();
+                                            if (!selection || selection.rangeCount === 0) return;
+                                            const range = selection.getRangeAt(0);
+                                            const pos = range.startOffset;
+                                            const textLen = block.text?.length || 0;
+                                            const blockIndex = inputBlocks.findIndex(b => b.id === block.id);
+
+                                            if (e.key === 'ArrowLeft' && pos === 0) {
+                                                const prevBlock = inputBlocks[blockIndex - 1];
+                                                if (prevBlock && prevBlock.type === 'file') {
+                                                    e.preventDefault();
+                                                    if (selectedChipId === prevBlock.id) {
+                                                        // 第二阶段：已选中，执行跳转
+                                                        const prevPrev = inputBlocks[blockIndex - 2];
+                                                        if (prevPrev?.type === 'text') {
+                                                            const prevEl = document.getElementById(`input-block-${prevPrev.id}`);
+                                                            if (prevEl) {
+                                                                prevEl.focus();
+                                                                const range = document.createRange();
+                                                                range.selectNodeContents(prevEl);
+                                                                range.collapse(false);
+                                                                selection.removeAllRanges();
+                                                                selection.addRange(range);
+                                                            }
+                                                        }
+                                                        setSelectedChipId(null);
+                                                    } else {
+                                                        // 第一阶段：先选中图片
+                                                        setSelectedChipId(prevBlock.id);
+                                                    }
+                                                }
+                                            }
+
+                                            if (e.key === 'ArrowRight' && pos === textLen) {
+                                                const nextBlock = inputBlocks[blockIndex + 1];
+                                                if (nextBlock && nextBlock.type === 'file') {
+                                                    e.preventDefault();
+                                                    if (selectedChipId === nextBlock.id) {
+                                                        // 第二阶段：已选中，执行跳转
+                                                        const nextNext = inputBlocks[blockIndex + 2];
+                                                        if (nextNext?.type === 'text') {
+                                                            const nextEl = document.getElementById(`input-block-${nextNext.id}`);
+                                                            if (nextEl) {
+                                                                nextEl.focus();
+                                                                const range = document.createRange();
+                                                                range.selectNodeContents(nextEl);
+                                                                range.collapse(true);
+                                                                selection.removeAllRanges();
+                                                                selection.addRange(range);
+                                                            }
+                                                        }
+                                                        setSelectedChipId(null);
+                                                    } else {
+                                                        // 第一阶段：先选中图片
+                                                        setSelectedChipId(nextBlock.id);
+                                                    }
+                                                }
+                                            }
+
+                                            if (e.key === 'Backspace' && pos === 0) {
+                                                const prevBlock = inputBlocks[blockIndex - 1];
+                                                if (prevBlock && prevBlock.type === 'file') {
+                                                    e.preventDefault();
+                                                    if (selectedChipId === prevBlock.id) {
+                                                        removeInputBlock(prevBlock.id);
+                                                        setSelectedChipId(null);
+                                                    } else {
+                                                        setSelectedChipId(prevBlock.id);
+                                                    }
+                                                }
+                                            }
+
+                                            if (e.key === 'Delete' && pos === textLen) {
+                                                const nextBlock = inputBlocks[blockIndex + 1];
+                                                if (nextBlock && nextBlock.type === 'file') {
+                                                    e.preventDefault();
+                                                    if (selectedChipId === nextBlock.id) {
+                                                        removeInputBlock(nextBlock.id);
+                                                        setSelectedChipId(null);
+                                                    } else {
+                                                        setSelectedChipId(nextBlock.id);
+                                                    }
+                                                }
+                                            }
+
                                             if (selectedChipId && (e.key === 'Backspace' || e.key === 'Delete')) { e.preventDefault(); removeInputBlock(selectedChipId); setSelectedChipId(null); }
                                         }}
                                     />
@@ -392,33 +570,41 @@ export const InputArea: React.FC<InputAreaProps> = ({
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-0.5">
+                    <div className="flex items-center gap-1.5 flex-1 justify-end">
                         {creationMode === 'image' && (
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-2">
                                 <div className="relative">
                                     <button
                                         onClick={() => { setShowRatioPicker(!showRatioPicker); setShowModelPicker(false); }}
-                                        className="h-7 px-2.5 flex items-center gap-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100 rounded-full transition whitespace-nowrap"
+                                        className="h-9 px-4 flex items-center gap-2 bg-gray-50 text-[13px] font-bold text-gray-700 hover:bg-gray-100 rounded-full transition whitespace-nowrap border border-gray-100"
                                     >
-                                        <span className="text-gray-400 font-normal">{imageGenRes} ·</span>
-                                        <span>{imageGenRatio}</span>
-                                        <ChevronDown size={11} className={`text-gray-400 transition-transform ${showRatioPicker ? 'rotate-180' : ''}`} />
+                                        <span>{imageGenRes} · {imageGenRatio}</span>
+                                        <ChevronDown size={14} className={`text-gray-400 transition-transform duration-300 ${showRatioPicker ? 'rotate-180' : ''}`} />
                                     </button>
                                     {showRatioPicker && (
-                                        <div className="absolute bottom-full left-0 mb-2 w-48 bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 z-50 animate-in fade-in zoom-in-95 duration-200">
-                                            <div className="px-2 py-1.5 text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">分辨率</div>
-                                            <div className="flex gap-1.5 mb-2 px-1">
+                                        <div className="absolute bottom-full left-0 mb-3 w-[260px] bg-white rounded-[24px] shadow-[0_20px_50px_-12px_rgba(0,0,0,0.15)] border border-gray-100 p-5 z-50 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                            <div className="text-[12px] text-gray-400 font-bold uppercase tracking-widest mb-4">分辨率</div>
+                                            <div className="flex gap-2 mb-6">
                                                 {['1K', '2K', '4K'].map(res => (
-                                                    <button key={res} onClick={() => { setImageGenRes(res); }} className={`flex-1 py-1 text-[10px] font-bold rounded-lg transition ${imageGenRes === res ? 'bg-blue-50 text-blue-600' : 'bg-gray-50 text-gray-500 hover:bg-gray-100'}`}>
+                                                    <button key={res} onClick={() => { setImageGenRes(res); }} className={`flex-1 py-2 text-[12px] font-bold rounded-xl transition-all ${imageGenRes === res ? 'bg-gray-200 text-black shadow-inner' : 'bg-gray-50 text-gray-500 hover:bg-gray-100'}`}>
                                                         {res}
                                                     </button>
                                                 ))}
                                             </div>
-                                            <div className="px-2 py-1.5 text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">比例</div>
-                                            <div className="grid grid-cols-2 gap-1 px-1">
-                                                {['1:1', '4:3', '3:4', '16:9', '9:16'].map(ratio => (
-                                                    <button key={ratio} onClick={() => { setImageGenRatio(ratio); setShowRatioPicker(false); }} className={`py-1.5 text-[11px] font-medium rounded-lg transition ${imageGenRatio === ratio ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-50'}`}>
-                                                        {ratio}
+                                            <div className="text-[12px] text-gray-400 font-bold uppercase tracking-widest mb-4">Size</div>
+                                            <div className="grid grid-cols-4 gap-2.5">
+                                                {[
+                                                    { r: '21:9', i: 'w-5 h-2' }, { r: '16:9', i: 'w-5 h-3' }, { r: '4:3', i: 'w-5 h-3.5' }, { r: '3:2', i: 'w-5 h-3.5' },
+                                                    { r: '1:1', i: 'w-4 h-4' }, { r: '9:16', i: 'w-3 h-5' }, { r: '3:4', i: 'w-3.5 h-5' }, { r: '2:3', i: 'w-3.5 h-5' },
+                                                    { r: '5:4', i: 'w-4.5 h-4' }, { r: '4:5', i: 'w-4 h-4.5' }
+                                                ].map(item => (
+                                                    <button 
+                                                        key={item.r} 
+                                                        onClick={() => { setImageGenRatio(item.r); setShowRatioPicker(false); }} 
+                                                        className={`flex flex-col items-center gap-1.5 py-2.5 rounded-xl border transition-all ${imageGenRatio === item.r ? 'bg-gray-100 border-gray-300 ring-1 ring-gray-300' : 'border-gray-100 hover:border-gray-300 bg-white'}`}
+                                                    >
+                                                        <div className={`border-[1.5px] border-gray-400 rounded-[2px] ${item.i} ${imageGenRatio === item.r ? 'bg-gray-400' : 'bg-transparent'}`} />
+                                                        <span className="text-[10px] font-bold text-gray-600">{item.r}</span>
                                                     </button>
                                                 ))}
                                             </div>
@@ -429,24 +615,23 @@ export const InputArea: React.FC<InputAreaProps> = ({
                                 <div className="relative">
                                     <button
                                         onClick={() => { setShowModelPicker(!showModelPicker); setShowRatioPicker(false); }}
-                                        className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-full transition"
+                                        className="w-9 h-9 flex items-center justify-center bg-white border border-gray-100 text-gray-500 hover:text-black hover:border-gray-300 rounded-full transition shadow-sm"
                                     >
-                                        <Banana size={16} strokeWidth={2} />
+                                        <Banana size={18} strokeWidth={1.5} />
                                     </button>
                                     {showModelPicker && (
-                                        <div className="absolute bottom-full right-0 mb-2 w-52 bg-white rounded-2xl shadow-2xl border border-gray-100 p-1.5 z-50 animate-in fade-in zoom-in-95 duration-200">
-                                            <div className="px-2.5 py-2 text-[10px] text-gray-400 font-bold uppercase tracking-widest border-b border-gray-50 mb-1">模型选择</div>
+                                        <div className="absolute bottom-full right-0 mb-3 w-[240px] bg-white rounded-[24px] shadow-[0_20px_50px_-12px_rgba(0,0,0,0.15)] border border-gray-100 p-2 z-50 animate-in fade-in slide-in-from-bottom-2 duration-300">
                                             {MODEL_OPTIONS.image.map(m => (
                                                 <button
                                                     key={m.id}
                                                     onClick={() => { setPreferredImageModel(m.id as ImageModel); setShowModelPicker(false); setAutoModelSelect(false); }}
-                                                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs transition-colors ${preferredImageModel === m.id && !autoModelSelect ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-700 hover:bg-gray-50'}`}
+                                                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-[13px] font-bold transition-all ${preferredImageModel === m.id && !autoModelSelect ? 'bg-gray-100 text-black' : 'text-gray-600 hover:bg-gray-50'}`}
                                                 >
-                                                    <div className="text-left">
-                                                        <div>{m.name}</div>
-                                                        <div className="text-[9px] font-normal text-gray-400 opacity-80">{m.desc}</div>
+                                                    <div className="flex items-center gap-2.5">
+                                                        <m.icon size={16} strokeWidth={1.5} className="text-gray-500" />
+                                                        <span>{m.name}</span>
                                                     </div>
-                                                    {preferredImageModel === m.id && !autoModelSelect && <Check size={12} />}
+                                                    {preferredImageModel === m.id && !autoModelSelect && <Check size={14} strokeWidth={2.5} />}
                                                 </button>
                                             ))}
                                         </div>
@@ -456,9 +641,124 @@ export const InputArea: React.FC<InputAreaProps> = ({
                                 <button
                                     onClick={() => handleSend()}
                                     disabled={inputBlocks.every(b => (b.type === 'text' && !b.text) || (b.type === 'file' && !b.file))}
-                                    className="h-8 pl-2.5 pr-2 rounded-full flex items-center gap-1.5 text-[13px] font-bold shadow-sm transition bg-[#E2E4E9] text-[#7E8391] hover:bg-gray-300 disabled:opacity-50"
+                                    className="h-9 px-4 rounded-full flex items-center justify-center text-[14px] font-bold shadow-sm transition bg-gradient-to-b from-gray-100 to-gray-200 text-gray-500 border border-gray-200 hover:from-gray-200 hover:to-gray-300 disabled:opacity-50"
                                 >
-                                    <Zap size={14} fill="currentColor" strokeWidth={0} /> 10
+                                    发送
+                                </button>
+                            </div>
+                        )}
+
+                        {creationMode === 'video' && (
+                            <div className="flex items-center gap-2">
+                                <div className="relative">
+                                    <button
+                                        onClick={() => { setShowVideoSettingsDropdown(!showVideoSettingsDropdown); }}
+                                        className="h-9 px-4 flex items-center gap-2 bg-gray-50 text-[13px] font-bold text-gray-700 hover:bg-gray-100 rounded-full transition whitespace-nowrap border border-gray-100"
+                                    >
+                                        <span>Frames · {videoGenRatio} · {videoGenDuration}</span>
+                                        <ChevronDown size={14} className={`text-gray-400 transition-transform duration-300 ${showVideoSettingsDropdown ? 'rotate-180' : ''}`} />
+                                    </button>
+                                    {showVideoSettingsDropdown && (
+                                        <div className="absolute bottom-full left-0 mb-3 w-[300px] bg-white rounded-[24px] shadow-[0_20px_50px_-12px_rgba(0,0,0,0.15)] border border-gray-100 p-5 z-50 animate-in fade-in slide-in-from-bottom-2 duration-300 flex flex-col gap-5">
+                                            {/* Generate Method */}
+                                            <div className="flex flex-col gap-2.5">
+                                                <div className="text-[13px] text-gray-500 font-bold">Generate method</div>
+                                                <div className="flex bg-gray-100 p-1 rounded-xl">
+                                                    {[
+                                                        { id: 'startEnd', label: '首尾帧' },
+                                                        { id: 'multiRef', label: '多图参考' }
+                                                    ].map(m => (
+                                                        <button 
+                                                            key={m.id}
+                                                            onClick={() => useAgentStore.getState().actions.setVideoGenMode(m.id as any)}
+                                                            className={`flex-1 py-1.5 text-[12px] font-bold rounded-lg transition-all ${videoGenMode === m.id ? 'bg-white shadow-sm text-black' : 'text-gray-400'}`}
+                                                        >
+                                                            {m.label}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            {/* Size */}
+                                            <div className="flex flex-col gap-2.5">
+                                                <div className="text-[13px] text-gray-500 font-bold">Size</div>
+                                                <div className="grid grid-cols-3 gap-2">
+                                                    {[
+                                                        { r: '16:9', i: 'w-6 h-3.5' }, { r: '9:16', i: 'w-3.5 h-6' }, { r: '1:1', i: 'w-4 h-4' }
+                                                    ].map(item => (
+                                                        <button 
+                                                            key={item.r} 
+                                                            onClick={() => useAgentStore.getState().actions.setVideoGenRatio(item.r)} 
+                                                            className={`flex flex-col items-center justify-center gap-2 py-3.5 rounded-xl border transition-all h-20 ${videoGenRatio === item.r ? 'bg-gray-100 border-gray-200' : 'border-gray-100 hover:border-gray-200 bg-white'}`}
+                                                        >
+                                                            <div className={`border-[1.5px] border-gray-400 rounded-[2px] ${item.i} ${videoGenRatio === item.r ? 'bg-gray-400' : 'bg-transparent'}`} />
+                                                            <span className="text-[11px] font-bold text-gray-600">{item.r}</span>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            {/* Resolution */}
+                                            <div className="flex flex-col gap-2.5">
+                                                <div className="text-[13px] text-gray-500 font-bold">Resolution</div>
+                                                <div className="flex gap-2">
+                                                    {['720p', '1080p', '4k'].map(res => (
+                                                        <button key={res} onClick={() => useAgentStore.getState().actions.setVideoGenQuality(res)} className={`flex-1 py-2 text-[12px] font-bold rounded-xl border transition-all ${useAgentStore.getState().videoGenQuality === res ? 'bg-gray-100 border-gray-200 text-black' : 'bg-white border-gray-100 text-gray-400'}`}>
+                                                            {res}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            {/* Duration */}
+                                            <div className="flex flex-col gap-2.5">
+                                                <div className="text-[13px] text-gray-500 font-bold">Duration</div>
+                                                <div className="flex gap-2">
+                                                    {['4s', '6s', '8s'].map(sec => (
+                                                        <button key={sec} onClick={() => useAgentStore.getState().actions.setVideoGenDuration(sec)} className={`flex-1 py-2 text-[12px] font-bold rounded-xl border transition-all ${videoGenDuration === sec ? 'bg-gray-100 border-gray-200 text-black' : 'bg-white border-gray-100 text-gray-400'}`}>
+                                                            {sec}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="relative">
+                                    <button 
+                                        onClick={() => setShowVideoModelDropdown(!showVideoModelDropdown)}
+                                        className={`w-9 h-9 flex items-center justify-center rounded-full transition shadow-sm border ${showVideoModelDropdown ? 'bg-gray-100 border-gray-300 text-black' : 'bg-white border-gray-100 text-gray-500 hover:text-black hover:border-gray-300'}`}
+                                    >
+                                        <Activity size={18} strokeWidth={1.5} />
+                                    </button>
+                                    {showVideoModelDropdown && (
+                                        <div className="absolute bottom-full right-0 mb-3 w-[240px] bg-white rounded-[24px] shadow-[0_20px_50px_-12px_rgba(0,0,0,0.15)] border border-gray-100 p-2 z-50 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                            <div className="px-3 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">选择视频模型</div>
+                                            <div className="max-h-[300px] overflow-y-auto scroller-hidden">
+                                                {MODEL_OPTIONS.video.map(m => (
+                                                    <button
+                                                        key={m.id}
+                                                        onClick={() => { setVideoGenModel(m.id as VideoModel); setShowVideoModelDropdown(false); setAutoModelSelect(false); }}
+                                                        className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-[13px] font-bold transition-all ${videoGenModel === m.id && !autoModelSelect ? 'bg-gray-100 text-black' : 'text-gray-600 hover:bg-gray-50'}`}
+                                                    >
+                                                        <div className="flex items-center gap-2.5">
+                                                            <m.icon size={16} strokeWidth={1.5} className="text-gray-500" />
+                                                            <span>{m.name}</span>
+                                                        </div>
+                                                        {videoGenModel === m.id && !autoModelSelect && <Check size={14} strokeWidth={2.5} />}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <button
+                                    onClick={() => handleSend()}
+                                    className="h-9 px-4 rounded-full flex items-center justify-center text-[14px] font-bold shadow-sm transition bg-gradient-to-b from-gray-100 to-gray-200 text-gray-500 border border-gray-200 hover:from-gray-200 hover:to-gray-300"
+                                >
+                                    发送
                                 </button>
                             </div>
                         )}
@@ -473,26 +773,102 @@ export const InputArea: React.FC<InputAreaProps> = ({
                                 <div className="relative">
                                     <button onClick={() => setShowModelPreference(!showModelPreference)} className="w-8 h-8 rounded-full flex items-center justify-center text-gray-500"><Box size={16} /></button>
                                     {showModelPreference && (
-                                        <div className="absolute bottom-full right-0 mb-2 w-72 bg-white rounded-2xl shadow-2xl border border-gray-200 z-50 p-4">
-                                            <div className="flex items-center justify-between mb-3">
-                                                <span className="text-sm font-semibold">模型偏好</span>
-                                                <div onClick={() => setAutoModelSelect(!autoModelSelect)} className={`w-9 h-5 rounded-full transition-colors relative cursor-pointer ${autoModelSelect ? 'bg-black' : 'bg-gray-300'}`}><div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${autoModelSelect ? 'translate-x-4' : 'translate-x-0.5'}`} /></div>
+                                        <div className="absolute bottom-full right-0 mb-4 w-[350px] bg-white rounded-[32px] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.15)] border border-gray-100 z-50 p-6 animate-in fade-in slide-in-from-bottom-3 duration-300">
+                                            {/* Header */}
+                                            <div className="flex items-center justify-between mb-6">
+                                                <h3 className="text-[17px] font-bold tracking-tight text-gray-900 font-display">模型偏好</h3>
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">自动选择</span>
+                                                    <button 
+                                                        onClick={() => setAutoModelSelect(!autoModelSelect)} 
+                                                        className={`w-11 h-6 rounded-full transition-all duration-300 relative ${autoModelSelect ? 'bg-black' : 'bg-gray-200 p-0.5'}`}
+                                                    >
+                                                        <motion.div 
+                                                            animate={{ x: autoModelSelect ? 24 : 2 }}
+                                                            className="absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm"
+                                                            transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                                                        />
+                                                    </button>
+                                                </div>
                                             </div>
-                                            <div className="flex gap-1 bg-gray-100 rounded-lg p-0.5 mb-3">
-                                                {['image', 'video', '3d'].map(tab => <button key={tab} onClick={() => setModelPreferenceTab(tab as any)} className={`flex-1 py-1.5 text-xs rounded-md ${modelPreferenceTab === tab ? 'bg-white shadow-sm' : 'text-gray-500'}`}>{tab.toUpperCase()}</button>)}
-                                            </div>
-                                            <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                                                {MODEL_OPTIONS[modelPreferenceTab].map(m => (
-                                                    <div key={m.id} onClick={() => { if (modelPreferenceTab === 'image') setPreferredImageModel(m.id as ImageModel); else if (modelPreferenceTab === 'video') setPreferredVideoModel(m.id as VideoModel); else setPreferred3DModel(m.id); setAutoModelSelect(false); }} className={`flex items-center justify-between p-2.5 rounded-xl cursor-pointer hover:bg-gray-50 ${(!autoModelSelect && ((modelPreferenceTab === 'image' && preferredImageModel === m.id) || (modelPreferenceTab === 'video' && preferredVideoModel === m.id) || (modelPreferenceTab === '3d' && preferred3DModel === m.id))) ? 'bg-blue-50' : ''}`}>
-                                                        <div className="text-sm font-medium">{m.name}</div>
-                                                        {(!autoModelSelect && ((modelPreferenceTab === 'image' && preferredImageModel === m.id) || (modelPreferenceTab === 'video' && preferredVideoModel === m.id) || (modelPreferenceTab === '3d' && preferred3DModel === m.id))) && <Check size={14} className="text-blue-500" />}
-                                                    </div>
+
+                                            {/* Tabs */}
+                                            <div className="flex bg-gray-100/60 rounded-2xl p-1.5 mb-6">
+                                                {['image', 'video', '3d'].map(tab => (
+                                                    <button 
+                                                        key={tab} 
+                                                        onClick={() => setModelPreferenceTab(tab as any)} 
+                                                        className={`flex-1 py-2 text-[11px] font-bold rounded-xl transition-all duration-300 uppercase tracking-wider ${modelPreferenceTab === tab ? 'bg-white text-black shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                                                    >
+                                                        {tab}
+                                                    </button>
                                                 ))}
+                                            </div>
+
+                                            {/* Model List */}
+                                            <div className="space-y-2.5 max-h-[420px] overflow-y-auto pr-1 group/list custom-scrollbar">
+                                                <AnimatePresence mode="wait">
+                                                    <motion.div
+                                                        key={modelPreferenceTab}
+                                                        initial={{ opacity: 0, y: 10 }}
+                                                        animate={{ opacity: 1, y: 0 }}
+                                                        exit={{ opacity: 0, y: -10 }}
+                                                        transition={{ duration: 0.2 }}
+                                                        className="space-y-2.5"
+                                                    >
+                                                        {MODEL_OPTIONS[modelPreferenceTab].map((m) => {
+                                                            const isSelected = !autoModelSelect && (
+                                                                (modelPreferenceTab === 'image' && preferredImageModel === m.id) || 
+                                                                (modelPreferenceTab === 'video' && preferredVideoModel === m.id) || 
+                                                                (modelPreferenceTab === '3d' && preferred3DModel === m.id)
+                                                            );
+
+                                                            return (
+                                                                <div 
+                                                                    key={m.id} 
+                                                                    onClick={() => { 
+                                                                        if (modelPreferenceTab === 'image') setPreferredImageModel(m.id as ImageModel); 
+                                                                        else if (modelPreferenceTab === 'video') setPreferredVideoModel(m.id as VideoModel); 
+                                                                        else setPreferred3DModel(m.id); 
+                                                                        setAutoModelSelect(false); 
+                                                                    }} 
+                                                                    className={`group flex items-start gap-4 p-4 rounded-[24px] cursor-pointer transition-all duration-300 border ${isSelected ? 'bg-black text-white border-black shadow-xl shadow-black/10' : 'bg-white border-gray-100/50 hover:border-gray-300 hover:shadow-md'}`}
+                                                                >
+                                                                    <div className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-colors shrink-0 ${isSelected ? 'bg-white/10 text-white border border-white/10' : 'bg-gray-50 text-gray-400 border border-gray-100 group-hover:bg-gray-100 group-hover:text-gray-600'}`}>
+                                                                        <m.icon size={22} strokeWidth={1.5} />
+                                                                    </div>
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <div className="flex items-center justify-between mb-1">
+                                                                            <h4 className={`text-[14px] font-bold truncate ${isSelected ? 'text-white' : 'text-gray-900 font-display'}`}>{m.name}</h4>
+                                                                            {m.badge && (
+                                                                                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-lg uppercase tracking-tight whitespace-nowrap ml-2 ${isSelected ? 'bg-white/20 text-white' : 'bg-blue-50 text-blue-600 border border-blue-100'}`}>
+                                                                                    {m.badge}
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                        <p className={`text-[11px] leading-[1.4] mb-2 line-clamp-2 ${isSelected ? 'text-white/60' : 'text-gray-400 font-medium'}`}>
+                                                                            {m.desc}
+                                                                        </p>
+                                                                        {m.time && (
+                                                                            <span className={`inline-flex px-2 py-0.5 rounded-lg text-[10px] font-bold ${isSelected ? 'bg-white/15 text-white' : 'bg-gray-100/80 text-gray-500'}`}>
+                                                                                {m.time}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                    <div className={`w-5 h-5 rounded-full border flex items-center justify-center mt-1 shrink-0 transition-all ${isSelected ? 'bg-white border-white scale-110 shadow-sm' : 'border-gray-200 group-hover:border-gray-400'}`}>
+                                                                        {isSelected && <Check size={12} className="text-black" strokeWidth={3} />}
+                                                                        {!isSelected && !autoModelSelect && <div className="w-1.5 h-1.5 rounded-full bg-gray-100 opacity-0 group-hover:opacity-100 transition-opacity" />}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </motion.div>
+                                                </AnimatePresence>
                                             </div>
                                         </div>
                                     )}
                                 </div>
-                                <button onClick={() => handleSend()} className="w-7 h-7 rounded-full flex items-center justify-center bg-blue-500 text-white"><ArrowUp size={15} /></button>
+                                <button onClick={() => handleSend()} className="w-9 h-9 rounded-full flex items-center justify-center bg-black text-white hover:bg-gray-800 transition shadow-md shrink-0"><ArrowUp size={18} strokeWidth={2.5} /></button>
                             </>
                         )}
                     </div>

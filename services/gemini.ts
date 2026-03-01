@@ -1,5 +1,5 @@
 
-import { GoogleGenAI, Chat, GenerateContentResponse, Part, Content, VideoGenerationReferenceImage, VideoGenerationReferenceType, Type } from "@google/genai";
+import { GoogleGenAI, Chat, GenerateContentResponse, Part, Content, Type } from "@google/genai";
 
 // Helper to get API configurations
 export const getProviderConfig = () => {
@@ -161,6 +161,12 @@ export const getClient = () => {
         config.httpOptions = { baseUrl }; // @google/genai SDK uses httpOptions.baseUrl
     }
     return new GoogleGenAI(config);
+};
+
+// Get base URL for video REST API (bypasses SDK's predictLongRunning endpoint)
+const getVideoBaseUrl = () => {
+    const baseUrl = getApiUrl();
+    return (baseUrl || 'https://generativelanguage.googleapis.com').replace(/\/+$/, '');
 };
 
 // Models
@@ -604,140 +610,131 @@ export const generateVideo = async (config: VideoGenerationConfig): Promise<stri
             }
         }
 
-        const genAI = getClient();
         let validAspectRatio = config.aspectRatio;
-        
-        // Normalize aspect ratio for Veo
         if (validAspectRatio !== '16:9' && validAspectRatio !== '9:16') {
             validAspectRatio = '16:9';
         }
 
         // 1. Determine the target model ID
-        // Support both friendly names (from provider) and raw IDs (from localStorage)
         let targetModelId = '';
-        
-        // Priority 1: Check config.model mapping
         if (config.model === 'Veo 3.1' || config.model === 'Veo 3.1 Pro') targetModelId = VEO_PRO_MODEL;
         else if (config.model === 'Veo 3.1 Fast') targetModelId = VEO_FAST_MODEL;
-        
-        // Priority 2: If not matched or using global rotation, pick from setting_video_models
+
         if (!targetModelId) {
             const selectedModels = JSON.parse(localStorage.getItem('setting_video_models') || '[]');
             const candidates = selectedModels.length > 0 ? selectedModels : [VEO_FAST_MODEL];
-            
             const storageKeyIdx = `service_poll_index_video`;
             let currentIdx = parseInt(localStorage.getItem(storageKeyIdx) || '0', 10);
             if (currentIdx >= candidates.length) currentIdx = 0;
-            
             targetModelId = candidates[currentIdx];
             localStorage.setItem(storageKeyIdx, ((currentIdx + 1) % candidates.length).toString());
-            
-            // Map common friendly names to internal IDs if found in rotation
             if (targetModelId === 'Veo 3.1 Pro' || targetModelId === 'Veo 3.1') targetModelId = VEO_PRO_MODEL;
             else if (targetModelId === 'Veo 3.1 Fast') targetModelId = VEO_FAST_MODEL;
         }
 
         const modelId = targetModelId || VEO_FAST_MODEL;
-        console.log(`[generateVideo] Requesting model: ${modelId} for prompt: ${config.prompt.slice(0, 50)}...`);
+        const baseUrl = getVideoBaseUrl();
+        const apiKey = getApiKey();
+        console.log(`[generateVideo] model=${modelId}, baseUrl=${baseUrl}, prompt=${config.prompt.slice(0, 50)}...`);
 
-        const commonConfig = {
-            numberOfVideos: 1,
-            resolution: '720p',
-            aspectRatio: validAspectRatio
-        };
-
-        const request: any = {
-            model: modelId,
-            prompt: config.prompt,
-            config: commonConfig
-        };
-
-        // Handle frames and reference images based on model capabilities
-        // Note: For Veo 3.1 Fast, we use image/lastFrame. 
-        // For Pro, we can use referenceImages.
-        
+        // 2. Build request body
+        const genConfig: any = { numberOfVideos: 1, aspectRatio: validAspectRatio };
+        const body: any = { model: `models/${modelId}`, prompt: config.prompt, config: genConfig };
         const isFastModel = modelId.includes('fast');
 
-        // Start Frame mapping
         if (config.startFrame) {
             const matches = config.startFrame.match(/^data:(.+);base64,(.+)$/);
             if (matches) {
-                request.image = {
-                    mimeType: matches[1],
-                    imageBytes: matches[2]
-                };
+                body.image = { mimeType: matches[1], imageBytes: matches[2] };
             }
         }
-
-        // End Frame mapping
         if (config.endFrame) {
             const matches = config.endFrame.match(/^data:(.+);base64,(.+)$/);
             if (matches) {
-                request.config.lastFrame = {
-                    mimeType: matches[1],
-                    imageBytes: matches[2]
-                };
+                genConfig.lastFrame = { mimeType: matches[1], imageBytes: matches[2] };
             }
         }
-
-        // Reference Images mapping (usually for Pro model or newer Fast capabilities)
         if (config.referenceImages && config.referenceImages.length > 0 && !isFastModel) {
-            const refPayload: VideoGenerationReferenceImage[] = [];
+            const refPayload: any[] = [];
             for (const imgStr of config.referenceImages) {
                 const matches = imgStr.match(/^data:(.+);base64,(.+)$/);
                 if (matches) {
                     refPayload.push({
-                        image: {
-                            mimeType: matches[1],
-                            imageBytes: matches[2]
-                        },
-                        referenceType: 'ASSET' as any
+                        image: { mimeType: matches[1], imageBytes: matches[2] },
+                        referenceType: 'ASSET'
                     });
                 }
             }
-            if (refPayload.length > 0) {
-                request.config.referenceImages = refPayload;
-            }
+            if (refPayload.length > 0) genConfig.referenceImages = refPayload;
         }
 
-        // Execute generation
-        let operation = await retryWithBackoff(() => genAI.models.generateVideos(request));
-        console.log(`[generateVideo] Operation created: ${operation.name}`);
+        // 3. POST via fetch — uses generateVideos endpoint (not SDK's predictLongRunning)
+        const isGoogleDirect = baseUrl.includes('googleapis.com');
+        const authHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (!isGoogleDirect) {
+            authHeaders['Authorization'] = `Bearer ${apiKey}`;
+        }
 
-        // Poll for completion
+        const generateUrl = isGoogleDirect
+            ? `${baseUrl}/v1beta/models/${modelId}:generateVideos?key=${apiKey}`
+            : `${baseUrl}/v1beta/models/${modelId}:generateVideos`;
+        console.log(`[generateVideo] POST ${generateUrl.replace(apiKey, '***')}`);
+
+        const genRes = await retryWithBackoff(async () => {
+            const r = await fetch(generateUrl, { method: 'POST', headers: authHeaders, body: JSON.stringify(body) });
+            if (!r.ok) {
+                const errBody = await r.text();
+                const err: any = new Error(`generateVideos ${r.status}: ${errBody}`);
+                err.status = r.status;
+                throw err;
+            }
+            return r.json();
+        });
+
+        const operationName = genRes.name;
+        if (!operationName) {
+            throw new Error(`生成请求未返回 operation name: ${JSON.stringify(genRes).slice(0, 200)}`);
+        }
+        console.log(`[generateVideo] Operation created: ${operationName}`);
+
+        // 4. Poll for completion
         let pollCount = 0;
-        const MAX_POLLS = 60; // 5 minutes max
-        
-        while (!operation.done && pollCount < MAX_POLLS) {
+        const MAX_POLLS = 60;
+
+        while (pollCount < MAX_POLLS) {
             await new Promise(resolve => setTimeout(resolve, 5000));
             pollCount++;
+
+            const pollUrl = isGoogleDirect
+                ? `${baseUrl}/v1beta/${operationName}?key=${apiKey}`
+                : `${baseUrl}/v1beta/${operationName}`;
+
             try {
-                operation = await retryWithBackoff(() => genAI.operations.getVideosOperation({ operation: operation }));
-                console.log(`[generateVideo] Polling... Status=${operation.done ? 'Done' : 'Processing'} (${pollCount})`);
+                const pollRes = await fetch(pollUrl, { headers: authHeaders });
+                const pollData = await pollRes.json();
+                console.log(`[generateVideo] Poll #${pollCount}: done=${pollData.done}`);
+
+                if (pollData.done) {
+                    if (pollData.error) {
+                        throw new Error(`生成失败: ${pollData.error.message || JSON.stringify(pollData.error)}`);
+                    }
+                    const uri = pollData.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri
+                        || pollData.response?.generatedVideos?.[0]?.video?.uri;
+                    if (uri) {
+                        return `${uri}${uri.includes('?') ? '&' : '?'}key=${apiKey}`;
+                    }
+                    throw new Error(`未获取到视频资源: ${JSON.stringify(pollData.response || pollData).slice(0, 300)}`);
+                }
             } catch (pollErr: any) {
-                console.warn(`[generateVideo] Polling error (will retry):`, pollErr.message || pollErr);
-                // Continue polling unless it's a fatal error
-                if (pollErr.status === 404) break; 
+                if (pollErr.message?.startsWith('生成失败') || pollErr.message?.startsWith('未获取到')) throw pollErr;
+                console.warn(`[generateVideo] Poll #${pollCount} error:`, pollErr.message);
             }
         }
 
-        if (!operation.done) {
-            throw new Error("视频生成超时，请稍后在项目中查看。");
-        }
-
-        const uri = operation.response?.generatedVideos?.[0]?.video?.uri;
-        if (uri) {
-            // Some providers might require passing the key in the URI for playback if not proxied
-            const apiKey = getApiKey();
-            return `${uri}${uri.includes('?') ? '&' : '?'}key=${apiKey}`;
-        }
-        
-        const errorMsg = operation.error?.message || "未获取到生成的视频资源。";
-        throw new Error(`生成失败: ${errorMsg}`);
+        throw new Error("视频生成超时，请稍后在项目中查看。");
 
     } catch (error: any) {
         console.error("Video Generation Detailed Error:", error);
-        
         const msg = (error.message || '').toLowerCase();
         if (msg.includes('requested entity was not found')) {
             throw new Error("模型无法在当前节点找到，请检查设置中的模型映射。");
@@ -746,7 +743,6 @@ export const generateVideo = async (config: VideoGenerationConfig): Promise<stri
         } else if (msg.includes('403') || msg.includes('permission') || msg.includes('401')) {
             throw new Error("API 密钥权限不足或已失效，请检查设置。");
         }
-        
         throw error;
     }
 }

@@ -4,26 +4,17 @@ const getKlingKey = (): string => {
   return localStorage.getItem('kling_api_key') || '';
 };
 
-async function pollTask(taskId: string, apiKey: string): Promise<any> {
-  const maxAttempts = 120; // 视频生成较慢，最多等 4 分钟
-  for (let i = 0; i < maxAttempts; i++) {
-    await new Promise(r => setTimeout(r, 3000));
-    const res = await fetch(`https://api.klingai.com/v1/videos/text2video/${taskId}`, {
-      headers: { 'Authorization': `Bearer ${apiKey}` },
-    });
-    const data = await res.json();
-    if (data.data?.task_status === 'succeed') return data;
-    if (data.data?.task_status === 'failed') {
-      throw new Error(data.data?.task_status_msg || '视频生成失败');
-    }
-  }
-  throw new Error('视频生成超时');
-}
+const KLING_MODEL_MAP: Record<string, string> = {
+  'Kling Standard': 'kling-v1',
+  'Kling Pro': 'kling-v1-5',
+  'Kling 2.0': 'kling-v2',
+  'Kling 2.6': 'kling-v2-6',
+};
 
 export const klingVideoProvider: VideoProvider = {
   id: 'kling',
   name: '可灵 AI',
-  models: ['Kling Standard', 'Kling Pro'],
+  models: ['Kling Standard', 'Kling Pro', 'Kling 2.0', 'Kling 2.6'],
 
   async generateVideo(request: VideoGenerationRequest, model: string): Promise<string | null> {
     const apiKey = getKlingKey();
@@ -36,7 +27,7 @@ export const klingVideoProvider: VideoProvider = {
 
     const body: Record<string, any> = {
       prompt: request.prompt,
-      model_name: model === 'Kling Pro' ? 'kling-v1-5' : 'kling-v1',
+      model_name: KLING_MODEL_MAP[model] || 'kling-v1',
       duration: '5',
       aspect_ratio: request.aspectRatio === '9:16' ? '9:16' : '16:9',
     };
@@ -67,7 +58,6 @@ export const klingVideoProvider: VideoProvider = {
       ? `https://api.klingai.com/v1/videos/image2video/${taskId}`
       : `https://api.klingai.com/v1/videos/text2video/${taskId}`;
 
-    // 复用 pollTask 但用正确的 endpoint
     const maxAttempts = 120;
     for (let i = 0; i < maxAttempts; i++) {
       await new Promise(r => setTimeout(r, 3000));

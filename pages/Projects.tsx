@@ -282,10 +282,10 @@ const Projects: React.FC<{ onExit?: () => void }> = ({ onExit }) => {
         </button>
       )}
       
-      <main className="pt-24 px-[6%] max-w-[1600px] mx-auto transition-all duration-300">
+      <main className="pt-20 lg:pt-24 px-4 sm:px-[6%] max-w-[1600px] mx-auto transition-all duration-300 pb-32 lg:pb-10">
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
             <div className="flex items-center gap-4">
-                <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600">项目</h1>
+                <h1 className="text-3xl font-display font-bold text-foreground tracking-tight">项目</h1>
                 <span className="bg-gray-200 text-gray-600 text-xs px-2 py-0.5 rounded-full font-medium">{projects.length}</span>
             </div>
             

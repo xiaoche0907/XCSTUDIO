@@ -4,6 +4,8 @@ import { routeToAgent, executeAgentTask, getAgentInfo, detectPipeline, executePi
 import { ChatMessage, CanvasElement } from '../types';
 import { assetsToCanvasElementsAtCenter } from '../utils/canvas-helpers';
 import { useAgentStore } from '../stores/agent.store';
+import { uploadImage } from '../utils/uploader';
+import { useImageHostStore } from '../stores/imageHost.store';
 import { localPreRoute } from '../services/agents/local-router';
 
 interface CanvasState {
@@ -99,7 +101,8 @@ export function useAgentOrchestrator(options: UseAgentOrchestratorOptions) {
   const processMessage = useCallback(async (
     message: string,
     attachments?: File[],
-    metadata?: Record<string, any>
+    metadata?: Record<string, any>,
+    userMessageId?: string
   ): Promise<AgentTask | null> => {
     if (!message.trim()) return null;
 
@@ -113,6 +116,38 @@ export function useAgentOrchestrator(options: UseAgentOrchestratorOptions) {
 
     try {
       console.log('[useAgentOrchestrator] Processing message:', message.substring(0, 50));
+
+      // 图片上传逻辑
+      let uploadedUrls: string[] = [];
+      if (attachments && attachments.length > 0) {
+        const hostProvider = useImageHostStore.getState().selectedProvider;
+        if (hostProvider !== 'none') {
+          console.log('[useAgentOrchestrator] Uploading attachments to host...');
+          // 更新状态提示用户
+          setCurrentTask({
+            id: `upload-${Date.now()}`,
+            agentId: 'coco' as AgentType,
+            status: 'analyzing', // 借用 analyzing 状态显示上传中
+            progressMessage: '正在同步图片至云端...',
+            input: { message, attachments, context: projectContext },
+            createdAt: Date.now(),
+            updatedAt: Date.now()
+          });
+
+          try {
+            uploadedUrls = await Promise.all(attachments.map(file => uploadImage(file)));
+            console.log('[useAgentOrchestrator] Upload success:', uploadedUrls);
+            
+            // 回填公网 URL 到 Store 中的消息附件 (Backfill public URLs to message attachments in Store)
+            if (userMessageId && uploadedUrls.length > 0) {
+              useAgentStore.getState().actions.updateMessageAttachments(userMessageId, uploadedUrls);
+              console.log('[useAgentOrchestrator] Updated message attachments with public URLs for:', userMessageId);
+            }
+          } catch (uploadError) {
+            console.error('[useAgentOrchestrator] Upload failed:', uploadError);
+          }
+        }
+      }
 
       // Read conversation history from store (single source of truth)
       const updatedContext = {
@@ -192,6 +227,7 @@ export function useAgentOrchestrator(options: UseAgentOrchestratorOptions) {
         input: {
           message,
           attachments,
+          uploadedAttachments: uploadedUrls.length > 0 ? uploadedUrls : undefined,
           context: updatedContext
         },
         createdAt: Date.now(),

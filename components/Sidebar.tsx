@@ -29,69 +29,114 @@ const Sidebar: React.FC<SidebarProps> = ({ onNewProject }) => {
   const isActive = (path: string) => location.pathname === path;
 
   return (
-    <motion.div
-      initial={{ x: -20, opacity: 0 }}
-      animate={{ x: 0, opacity: 1 }}
-      className="fixed left-6 top-1/2 -translate-y-1/2 flex flex-col gap-4 z-50"
-    >
-      <div>
-        <button
-          onClick={handleNewProject}
-          className="w-12 h-12 rounded-full flex items-center justify-center transition-all duration-200 shadow-lg bg-black text-white hover:scale-105"
-          title="新建项目"
-        >
-          <Plus size={24} />
-        </button>
-      </div>
+    <>
+      {/* 桌面端侧边栏 */}
+      <motion.div
+        initial={{ x: -20, opacity: 0 }}
+        animate={{ x: 0, opacity: 1 }}
+        className="fixed left-6 top-1/2 -translate-y-1/2 hidden lg:flex flex-col gap-4 z-50"
+      >
+        <div>
+          <button
+            onClick={handleNewProject}
+            className="w-12 h-12 rounded-lg flex items-center justify-center transition-all duration-200 shadow-premium bg-foreground text-background hover:scale-105 active:scale-95"
+            title="新建项目"
+          >
+            <Plus size={24} />
+          </button>
+        </div>
 
-      <div className="w-12 py-6 bg-white/80 backdrop-blur-md rounded-full shadow-xl flex flex-col items-center gap-6 border border-white/20">
+        <div className="w-12 py-6 bg-card/80 backdrop-blur-xl rounded-full shadow-premium flex flex-col items-center gap-6 border border-border/50">
+          <button
+            onClick={() => navigate("/")}
+            className={`p-2 rounded-full transition ${
+              isActive("/")
+                ? "bg-gray-100 text-black shadow-sm"
+                : "text-gray-400 hover:text-black hover:bg-gray-50"
+            }`}
+            title="首页"
+          >
+            <HomeIcon size={20} />
+          </button>
+          <button
+            onClick={() => navigate("/projects")}
+            className={`p-2 rounded-full transition ${
+              isActive("/projects")
+                ? "bg-gray-100 text-black shadow-sm"
+                : "text-gray-400 hover:text-black hover:bg-gray-50"
+            }`}
+            title="项目"
+          >
+            <Folder size={20} />
+          </button>
+          <button
+            className="p-2 text-gray-400 hover:text-black hover:bg-gray-50 rounded-full transition"
+            title="用户中心"
+          >
+            <User size={20} />
+          </button>
+          <button
+            className="p-2 text-gray-400 hover:text-black hover:bg-gray-50 rounded-full transition"
+            title="信息"
+          >
+            <Info size={20} />
+          </button>
+          <button
+            onClick={() => navigate("/settings")}
+            className={`p-2 rounded-full transition ${
+              isActive("/settings")
+                ? "bg-gray-100 text-black shadow-sm"
+                : "text-gray-400 hover:text-black hover:bg-gray-50"
+            }`}
+            title="设置 / API Key"
+          >
+            <Settings size={20} />
+          </button>
+        </div>
+      </motion.div>
+
+      {/* 移动端底部导航 */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 h-16 bg-white/80 backdrop-blur-xl border-t border-gray-100 flex items-center justify-around px-4 z-50 pb-safe">
         <button
           onClick={() => navigate("/")}
-          className={`p-2 rounded-full transition ${
-            isActive("/")
-              ? "bg-gray-100 text-black shadow-sm"
-              : "text-gray-400 hover:text-black hover:bg-gray-50"
-          }`}
-          title="首页"
+          className={`flex flex-col items-center gap-1 ${isActive("/") ? "text-black" : "text-gray-400"}`}
         >
-          <HomeIcon size={20} />
+          <HomeIcon size={20} strokeWidth={isActive("/") ? 2.5 : 2} />
+          <span className="text-[10px] font-black uppercase tracking-tighter">首页</span>
         </button>
         <button
           onClick={() => navigate("/projects")}
-          className={`p-2 rounded-full transition ${
-            isActive("/projects")
-              ? "bg-gray-100 text-black shadow-sm"
-              : "text-gray-400 hover:text-black hover:bg-gray-50"
-          }`}
-          title="项目"
+          className={`flex flex-col items-center gap-1 ${isActive("/projects") ? "text-black" : "text-gray-400"}`}
         >
-          <Folder size={20} />
+          <Folder size={20} strokeWidth={isActive("/projects") ? 2.5 : 2} />
+          <span className="text-[10px] font-black uppercase tracking-tighter">项目</span>
         </button>
+        
+        {/* 中间突出按钮 */}
+        <div className="-translate-y-4">
+          <button
+            onClick={handleNewProject}
+            className="w-14 h-14 rounded-2xl bg-black text-white flex items-center justify-center shadow-2xl shadow-black/20 active:scale-90 transition-all"
+          >
+            <Plus size={28} />
+          </button>
+        </div>
+
         <button
-          className="p-2 text-gray-400 hover:text-black hover:bg-gray-50 rounded-full transition"
-          title="用户中心"
+          className="flex flex-col items-center gap-1 text-gray-400"
         >
           <User size={20} />
-        </button>
-        <button
-          className="p-2 text-gray-400 hover:text-black hover:bg-gray-50 rounded-full transition"
-          title="信息"
-        >
-          <Info size={20} />
+          <span className="text-[10px] font-black uppercase tracking-tighter">我的</span>
         </button>
         <button
           onClick={() => navigate("/settings")}
-          className={`p-2 rounded-full transition ${
-            isActive("/settings")
-              ? "bg-gray-100 text-black shadow-sm"
-              : "text-gray-400 hover:text-black hover:bg-gray-50"
-          }`}
-          title="设置 / API Key"
+          className={`flex flex-col items-center gap-1 ${isActive("/settings") ? "text-black" : "text-gray-400"}`}
         >
-          <Settings size={20} />
+          <Settings size={20} strokeWidth={isActive("/settings") ? 2.5 : 2} />
+          <span className="text-[10px] font-black uppercase tracking-tighter">设置</span>
         </button>
       </div>
-    </motion.div>
+    </>
   );
 };
 

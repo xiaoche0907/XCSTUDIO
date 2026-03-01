@@ -276,6 +276,7 @@ const Workspace: React.FC = () => {
     const [showShapeMenu, setShowShapeMenu] = useState(false);
     const [focusedGroupId, setFocusedGroupId] = useState<string | null>(null);
     const [markers, setMarkers] = useState<Marker[]>([]);
+    const [isCtrlPressed, setIsCtrlPressed] = useState(false);
     const [hoveredMarkerId, setHoveredMarkerId] = useState<number | null>(null);
     const [leftPanelMode, setLeftPanelMode] = useState<'layers' | 'files' | null>(null);
     const [contextMenu, setContextMenu] = useState<{ x: number, y: number } | null>(null);
@@ -416,7 +417,6 @@ const Workspace: React.FC = () => {
         setPendingModelMode(newMode);
         setShowModeSwitchDialog(true);
     };
-
     const confirmModeSwitch = () => {
         if (pendingModelMode) {
             setModelMode(pendingModelMode);
@@ -425,6 +425,53 @@ const Workspace: React.FC = () => {
         setShowModeSwitchDialog(false);
         setPendingModelMode(null);
     };
+
+    // 全局点击解选逻辑 (针对画布空白区域) - 使用捕获阶段确保万无一失
+    useEffect(() => {
+        const handleGlobalMouseDown = (e: MouseEvent) => {
+            const target = e.target as HTMLElement;
+            
+            // 排除所有非画布覆盖层 UI：侧边栏、对话框、各种 Modal、Popovers、输入框、工具栏以及历史记录
+            const isSidebar = target.closest('.assistant-sidebar') || target.closest('.right-sidebar');
+            const isInputArea = target.closest('.input-flow-container') || target.closest('.message-list') || target.closest('[class*="InputArea"]');
+            const isPopupUI = target.closest('.history-popover-content') || 
+                              target.closest('.file-list-modal') || 
+                              target.closest('.settings-modal') || 
+                              target.closest('.dialog-overlay') ||
+                              target.closest('[class*="Modal"]') ||
+                              target.closest('[class*="Dialog"]');
+
+            if (isSidebar || isInputArea || isPopupUI) {
+                return;
+            }
+
+            const isCanvasElement = target.closest('[id^="canvas-el-"]');
+            const isToolbar = target.closest('.floating-toolbar') || 
+                              target.closest('#active-floating-toolbar') || 
+                              target.closest('.toolbar-container') || 
+                              target.closest('.toolbar');
+            const isMarker = target.closest('.group\\/marker') || target.closest('[id^="marker-"]');
+            
+            // 核心判定：只要不是点击在特定的 UI 或 元素上，就视作“点击空白”
+            if (!isCanvasElement && !isToolbar && !isMarker) {
+                // 如果是中间键或右键，交给 contextMenu 处理
+                if (e.button !== 0) return;
+
+                // 强制解除所有状态
+                setSelectedElementId(null);
+                setSelectedElementIds([]);
+                setSelectedChipId(null);
+                setEditingTextId(null);
+                setShowFontPicker(false);
+                setShowModelPicker(false);
+                setShowResPicker(false);
+                setShowRatioPicker(false);
+            }
+        };
+
+        window.addEventListener('mousedown', handleGlobalMouseDown, true); 
+        return () => window.removeEventListener('mousedown', handleGlobalMouseDown, true);
+    }, [activeTool, isSpacePressed]);
 
     // Model preference data
     const MODEL_OPTIONS: {
@@ -667,7 +714,7 @@ const Workspace: React.FC = () => {
 
         // 首次发送时初始化会话 ID，确保消息能关联到正确的会话
         if (!activeConversationId) {
-            setActiveConversationId(`conv-${Date.now()}`);
+            setActiveConversationId(`session-${Date.now()}`);
         }
 
         // 2. 构造并将用户消息添加至 Store
@@ -692,7 +739,7 @@ const Workspace: React.FC = () => {
         try {
             // 4. 调用 Orchestrator 处理任务
             console.log('[Workspace] handleSend: calling processMessage with text:', text.substring(0, 50));
-            const result = await processMessage(text, attachments);
+            const result = await processMessage(text, attachments, undefined, userMsg.id);
             console.log('[Workspace] handleSend: processMessage returned:', result?.status, result?.output?.message?.substring(0, 50));
 
             if (result && result.output) {
@@ -751,7 +798,7 @@ const Workspace: React.FC = () => {
 
         const markerIdsInInput = inputBlocks
             .filter(block => block.type === 'file' && block.file && (block.file as any).markerId)
-            .map(block => (block.file as any).markerId as number);
+            .map(block => (block.file as any).markerId as string);
 
         setMarkers(prev => {
             // If there are no marker files in input but there are markers, clear them
@@ -780,12 +827,7 @@ const Workspace: React.FC = () => {
             !(b.type === 'file' && b.file && (b.file as any).markerId && !markerIds.includes((b.file as any).markerId))
         );
         filtered = normalizeInputBlocks(filtered);
-        let idx = 1;
-        filtered.forEach(b => {
-            if (b.type === 'file' && b.file && (b.file as any).markerId) {
-                (b.file as any).markerId = idx++;
-            }
-        });
+        // 修复：不再重排 markerId，保持其作为稳定唯一标识
         setInputBlocks(filtered);
     }, [markers]);
 
@@ -795,12 +837,17 @@ const Workspace: React.FC = () => {
         // 合并单选和多选
         const ids = selectedElementIds.length > 0 ? selectedElementIds : (selectedElementId ? [selectedElementId] : []);
         const prev = prevSelectedIdsRef.current;
-        prevSelectedIdsRef.current = ids;
+        
+        // 只有 Agent 模式下才执行画布图片自动插入/清除逻辑
+        if (creationMode !== 'agent') {
+            prevSelectedIdsRef.current = ids;
+            return;
+        }
 
-        // 选中列表没变就跳过
+        // 选中列表没变就跳过 (只有在 ID 列表真正变化时才执行)
         if (JSON.stringify(ids) === JSON.stringify(prev)) return;
 
-        // 取消全部选中时 → 清除自动插入的画布图片 chip（保留标记点 chip 和手动添加的文件）
+        // 取消全部选中时 → 清除自动插入的画布图片 chip
         if (ids.length === 0 && prev.length > 0) {
             const currentBlocks = useAgentStore.getState().inputBlocks;
             const filtered = currentBlocks.filter(b => {
@@ -809,24 +856,27 @@ const Workspace: React.FC = () => {
                 return true;
             });
             setInputBlocks(normalizeInputBlocks(filtered));
+            prevSelectedIdsRef.current = ids;
             return;
         }
 
+        // 记录当前 ID 列表
+        prevSelectedIdsRef.current = ids;
+
         // 找出新增的选中元素（之前没选中，现在选中了）
         const newIds = ids.filter(id => !prev.includes(id));
-
-        // 没有新选中的元素就跳过
         if (newIds.length === 0) return;
 
         // 只添加新选中的图片（已经在 inputBlocks 里的不重复添加）
+        const currentBlocks = useAgentStore.getState().inputBlocks;
         const existingElIds = new Set(
-            inputBlocks.filter(b => b.type === 'file' && b.file && (b.file as any)._canvasElId)
+            currentBlocks.filter(b => b.type === 'file' && b.file && (b.file as any)._canvasElId)
                 .map(b => (b.file as any)._canvasElId)
         );
         const imageEls = elements.filter(e => newIds.includes(e.id) && !existingElIds.has(e.id) && (e.type === 'image' || e.type === 'gen-image') && e.url);
         if (imageEls.length === 0) return;
 
-        // 用 insertInputFile 在光标位置插入（逐个插入，每个都在当前光标位置）
+        // 用 insertInputFile 在光标位置插入
         (async () => {
             for (const el of imageEls) {
                 try {
@@ -839,7 +889,7 @@ const Workspace: React.FC = () => {
                 } catch (_) { /* ignore */ }
             }
         })();
-    }, [selectedElementIds, selectedElementId]);
+    }, [selectedElementIds, selectedElementId, creationMode, elements]);
 
     // Text Edit Feature State
     const [showTextEditModal, setShowTextEditModal] = useState(false);
@@ -899,16 +949,10 @@ const Workspace: React.FC = () => {
         // Also remove corresponding markers from canvas if this file had a markerId
         if (block.file && (block.file as any).markerId) {
             const markerId = (block.file as any).markerId;
-            const newMarkers = markers.filter(m => m.id !== markerId).map((m, i) => ({ ...m, id: i + 1 }));
+            // 修复：仅过滤掉被删除的标记，不再重排剩余标记的 ID，以保持 React key 的稳定性
+            const newMarkers = markers.filter(m => m.id !== markerId);
             setMarkers(newMarkers);
             saveToHistory(elements, newMarkers);
-
-            // Update inputBlocks' files markerIds
-            newBlocks.forEach(b => {
-                if (b.type === 'file' && b.file && (b.file as any).markerId > markerId) {
-                    (b.file as any).markerId -= 1;
-                }
-            });
         }
 
         // Remove the block
@@ -1410,6 +1454,22 @@ const Workspace: React.FC = () => {
 
 
 
+    // Ctrl 键监听：用于切换自定义光标
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Control') setIsCtrlPressed(true);
+        };
+        const handleKeyUp = (e: KeyboardEvent) => {
+            if (e.key === 'Control') setIsCtrlPressed(false);
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        window.addEventListener('keyup', handleKeyUp);
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+            window.removeEventListener('keyup', handleKeyUp);
+        };
+    }, []);
+
     // 对话持久化：messages 变化时自动保存到当前会话
     useEffect(() => {
         if (messages.length === 0 || !id) return;
@@ -1770,12 +1830,34 @@ const Workspace: React.FC = () => {
         if (!el || !el.genPrompt) return;
         const update1 = elements.map(e => e.id === elementId ? { ...e, isGenerating: true } : e);
         setElements(update1);
+
+        // Helper: convert blob URL to base64 data URI
+        const blobToBase64 = async (url: string): Promise<string> => {
+            if (!url || url.startsWith('data:')) return url;
+            const res = await fetch(url);
+            const blob = await res.blob();
+            return new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+        };
+
         try {
-            // If Veo 3.1 Fast, we can use startFrame/endFrame directly or map from refImages if that's what UI populated
-            // The UI uses `genVideoRefs` for Fast model too (as single ref).
+            // Convert blob URLs to base64 before passing to provider
             let startFrame = el.genStartFrame;
             if (!startFrame && el.genModel?.includes('Fast') && el.genVideoRefs?.[0]) {
                 startFrame = el.genVideoRefs[0];
+            }
+            if (startFrame) startFrame = await blobToBase64(startFrame);
+
+            let endFrame = el.genEndFrame;
+            if (endFrame) endFrame = await blobToBase64(endFrame);
+
+            let refImages: string[] | undefined;
+            if (el.genVideoRefs && el.genVideoRefs.length > 0) {
+                refImages = await Promise.all(el.genVideoRefs.map(blobToBase64));
             }
 
             const resultUrl = await videoGenSkill({
@@ -1783,8 +1865,8 @@ const Workspace: React.FC = () => {
                 aspectRatio: el.genAspectRatio as any || '16:9',
                 model: el.genModel as VideoModel || 'Veo 3.1 Fast',
                 startFrame: startFrame,
-                endFrame: el.genEndFrame,
-                referenceImages: el.genVideoRefs
+                endFrame: endFrame,
+                referenceImages: refImages
             });
             if (resultUrl) {
                 const update2 = elements.map(e => e.id === elementId ? { ...e, isGenerating: false, url: resultUrl } : e);
@@ -1822,11 +1904,14 @@ const Workspace: React.FC = () => {
             } else {
                 const updateFail = elements.map(e => e.id === elementId ? { ...e, isGenerating: false } : e);
                 setElements(updateFail);
+                addMessage({ id: Date.now().toString(), role: 'model', text: '视频生成未返回结果，请检查模型配置或稍后重试。', timestamp: Date.now() });
             }
-        } catch (e) {
+        } catch (e: any) {
             console.error(e);
-            const updateFail = elements.map(e => e.id === elementId ? { ...e, isGenerating: false } : e);
+            const updateFail = elements.map(e2 => e2.id === elementId ? { ...e2, isGenerating: false } : e2);
             setElements(updateFail);
+            const errMsg = e?.message || '未知错误';
+            addMessage({ id: Date.now().toString(), role: 'model', text: `视频生成失败：${errMsg}`, timestamp: Date.now() });
         }
     };
 
@@ -2031,7 +2116,37 @@ const Workspace: React.FC = () => {
 
     const handleContextMenu = (e: React.MouseEvent) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY }); };
     // Wheel handled by native listener in useEffect
-    const handleMouseDown = (e: React.MouseEvent) => { e.preventDefault(); if (contextMenu) setContextMenu(null); if (activeTool === 'hand' || e.button === 1 || e.buttons === 4 || isSpacePressed) { (document.activeElement as HTMLElement)?.blur(); setIsPanning(true); setDragStart({ x: e.clientX, y: e.clientY }); return; } if (e.target === containerRef.current || e.target === canvasLayerRef.current) { (document.activeElement as HTMLElement)?.blur(); setSelectedElementId(null); setSelectedElementIds([]); setEditingTextId(null); if (activeTool === 'select') { setIsMarqueeSelecting(true); setMarqueeStart({ x: e.clientX, y: e.clientY }); setMarqueeEnd({ x: e.clientX, y: e.clientY }); } else { setIsPanning(true); setDragStart({ x: e.clientX, y: e.clientY }); } setShowFontPicker(false); setShowModelPicker(false); setShowResPicker(false); setShowRatioPicker(false); } };
+    const handleMouseDown = (e: React.MouseEvent) => {
+        const target = e.target as HTMLElement;
+        // 冗余解选逻辑已移动到 handleGlobalMouseDown (捕获阶段)
+        // 此处不再进行强制解选，以免干扰 handleMouseMove 中的框选逻辑
+        if (contextMenu) setContextMenu(null);
+
+        // 处理平移 (Pan) 逻辑
+        if (activeTool === 'hand' || e.button === 1 || (e.button === 0 && isSpacePressed)) {
+            e.preventDefault();
+            (document.activeElement as HTMLElement)?.blur();
+            setIsPanning(true);
+            setDragStart({ x: e.clientX, y: e.clientY });
+            return;
+        }
+
+        // 如果点击的是背景容器或画布层
+        if (target === containerRef.current || target === canvasLayerRef.current || target.classList.contains('canvas-background')) {
+            // 背景点击的“取消选中”逻辑现在由 useEffect 中的 handleGlobalMouseDown (捕获阶段) 统一处理
+            // 此处仅保留处理 平移 (Pan) 和 框选 (Marquee) 的初始化
+            e.preventDefault();
+            (document.activeElement as HTMLElement)?.blur();
+            if (activeTool === 'select') {
+                setIsMarqueeSelecting(true);
+                setMarqueeStart({ x: e.clientX, y: e.clientY });
+                setMarqueeEnd({ x: e.clientX, y: e.clientY });
+            } else {
+                setIsPanning(true);
+                setDragStart({ x: e.clientX, y: e.clientY });
+            }
+        }
+    };
 
     const handleMouseMove = (e: React.MouseEvent) => {
         if (isResizing && selectedElementId) {
@@ -2250,11 +2365,14 @@ const Workspace: React.FC = () => {
         e.preventDefault();
 
         if (activeTool === 'mark' || e.ctrlKey || e.metaKey) {
-            const rect = e.currentTarget.getBoundingClientRect();
-            const x = ((e.clientX - rect.left) / rect.width) * 100;
-            const y = ((e.clientY - rect.top) / rect.height) * 100;
+            // 精准定位：优先使用图片 <img> 元素的 rect，而非外层容器（容器可能有溢出子元素导致 rect 偏移）
+            const imgEl = (e.currentTarget as HTMLElement).querySelector('img');
+            const rect = imgEl ? imgEl.getBoundingClientRect() : e.currentTarget.getBoundingClientRect();
+            const x = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+            const y = Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100));
 
-            const newMarkerId = markers.length + 1;
+            // 修复：生成持久且唯一的稳定 ID，避免删除时重排导致动画重置
+            const newMarkerId = (Date.now() + Math.random()).toString();
 
             // Crop and Add to Input Box logic
             const el = elements.find(e => e.id === id);
@@ -2274,7 +2392,7 @@ const Workspace: React.FC = () => {
                             await new Promise(resolve => setTimeout(resolve, 100));
                         }
 
-                        const file = dataURLtoFile(crop, `marker-${newMarkerId}.png`);
+                        const file = dataURLtoFile(crop, `marker-${markers.length + 1}.png`);
                         (file as any).markerId = newMarkerId;
                         (file as any).markerName = '识别中...';
                         (file as any).markerInfo = {
@@ -2287,9 +2405,11 @@ const Workspace: React.FC = () => {
                             imageHeight: el.height
                         };
 
-                        setTimeout(() => {
-                            insertInputFile(file);
-                        }, 150);
+                        if (creationMode === 'agent') {
+                            setTimeout(() => {
+                                insertInputFile(file);
+                            }, 150);
+                        }
 
                         // 异步识别裁剪区域内容，识别完成后更新 chip 名称
                         analyzeImageRegion(crop).then(name => {
@@ -2401,19 +2521,14 @@ const Workspace: React.FC = () => {
         setResizeHandle(handle);
         setResizeStart({ x: e.clientX, y: e.clientY, width: el.width, height: el.height, left: el.x, top: el.y });
     };
-    const removeMarker = (id: number) => {
-        const newMarkers = markers.filter(m => m.id !== id).map((m, i) => ({ ...m, id: i + 1 }));
+    const removeMarker = (id: string) => {
+        const newMarkers = markers.filter(m => m.id !== id);
         setMarkers(newMarkers);
         saveToHistory(elements, newMarkers);
-        // 同步删除对应 chip，并重新编号剩余 chip 的 markerId
+        // 同步删除对应 chip
         const currentBlocks = useAgentStore.getState().inputBlocks;
         const filtered = currentBlocks.filter(b => !(b.type === 'file' && b.file && (b.file as any).markerId === id));
-        let idx = 1;
-        filtered.forEach(b => {
-            if (b.type === 'file' && b.file && (b.file as any).markerId) {
-                (b.file as any).markerId = idx++;
-            }
-        });
+        // 修复：不再对 markerId 重新编号，以保持稳定
         setInputBlocks([...filtered]);
     };
 
@@ -3772,11 +3887,29 @@ const Workspace: React.FC = () => {
                         setIsVideoPanelHovered={setIsVideoPanelHovered}
                         showVideoSettingsDropdown={showVideoSettingsDropdown}
                         setShowVideoSettingsDropdown={setShowVideoSettingsDropdown}
+                        markers={markers}
                     />
                 )}
             </AnimatePresence>
 
-            <div className="flex-1 relative flex flex-col h-full overflow-hidden">
+            <div className={`flex-1 relative flex flex-col h-full overflow-hidden ${isCtrlPressed ? 'cursor-none' : ''}`}>
+                {/* 
+                  按住 Ctrl 时的自定义光标：
+                  样式为一个外圈圆框内含一个精准定位的小蓝点 
+                */}
+                {isCtrlPressed && (
+                    <div 
+                        className="fixed pointer-events-none z-[99999] w-[24px] h-[24px] -ml-[12px] -mt-[12px] border-2 border-blue-500 rounded-full flex items-center justify-center transition-transform duration-75"
+                        style={{ 
+                            left: 'var(--mouse-x, 0)', 
+                            top: 'var(--mouse-y, 0)',
+                            background: 'rgba(59, 130, 246, 0.1)'
+                        }}
+                    >
+                        <div className="w-1.5 h-1.5 bg-blue-500 rounded-full shadow-[0_0_8px_rgba(59,130,246,0.8)]" />
+                    </div>
+                )}
+
                 {/* Top Bar - Lovart Style: minimal, transparent */}
                 <div className="absolute top-4 left-5 right-5 flex justify-between items-center z-30 pointer-events-none transition-all duration-300" style={{ paddingRight: showAssistant ? '500px' : '0' }}>
                     <div className="flex items-center gap-3 pointer-events-auto">
@@ -3800,7 +3933,25 @@ const Workspace: React.FC = () => {
 
                 <ToolbarBottom leftPanelMode={leftPanelMode} setLeftPanelMode={setLeftPanelMode} zoom={zoom} setZoom={setZoom} />
 
-                <div ref={containerRef} className="flex-1 overflow-hidden relative bg-[#E8E8E8] w-full h-full select-none" onContextMenu={handleContextMenu} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }} onDrop={handleCanvasDrop} style={{ cursor: (activeTool === 'hand' || isPanning || isSpacePressed) ? (isPanning ? 'grabbing' : 'grab') : (activeTool === 'mark' ? 'crosshair' : (activeTool === 'select' ? 'default' : 'grab')), WebkitUserSelect: 'none' }}>
+                <div 
+                    ref={containerRef} 
+                    className="flex-1 overflow-hidden relative bg-[#E8E8E8] w-full h-full select-none" 
+                    onContextMenu={handleContextMenu} 
+                    onMouseDown={handleMouseDown} 
+                    onMouseMove={(e) => {
+                        handleMouseMove(e);
+                        document.documentElement.style.setProperty('--mouse-x', `${e.clientX}px`);
+                        document.documentElement.style.setProperty('--mouse-y', `${e.clientY}px`);
+                    }} 
+                    onMouseUp={handleMouseUp} 
+                    onMouseLeave={handleMouseUp} 
+                    onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }} 
+                    onDrop={handleCanvasDrop} 
+                    style={{ 
+                        cursor: (isCtrlPressed || activeTool === 'mark') ? 'none' : ((activeTool === 'hand' || isPanning || isSpacePressed) ? (isPanning ? 'grabbing' : 'grab') : 'default'), 
+                        WebkitUserSelect: 'none' 
+                    }}
+                >
                     {renderToolbar()}
                     {/* 框选矩形 */}
                     {isMarqueeSelecting && (
@@ -3860,7 +4011,22 @@ const Workspace: React.FC = () => {
                                 }
 
                                 return (
-                                    <div key={el.id} id={`canvas-el-${el.id}`} className={`absolute group ${isSelected && el.type !== 'text' ? 'ring-2 ring-blue-500' : ''} ${isSelected && el.type === 'text' ? 'ring-1 ring-blue-500 ring-offset-2' : ''} ${isLocked ? 'pointer-events-none' : ''}`} style={{ left: el.x, top: el.y, width: el.type === 'text' ? 'auto' : el.width, height: el.type === 'text' ? 'auto' : el.height, zIndex: el.zIndex, cursor: activeTool === 'select' ? (isLocked ? 'default' : 'move') : (activeTool === 'mark' ? 'crosshair' : 'default'), whiteSpace: el.type === 'text' ? 'nowrap' : 'normal' }} onMouseDown={(e) => !isLocked && handleElementMouseDown(e, el.id)} onDoubleClick={() => { if (el.type === 'text') { setEditingTextId(el.id); } else if (el.url) { setPreviewUrl(el.url); } }}>
+                                    <div 
+                                        key={el.id} 
+                                        id={`canvas-el-${el.id}`} 
+                                        className={`absolute group ${isSelected && el.type !== 'text' ? 'ring-2 ring-blue-500' : ''} ${isSelected && el.type === 'text' ? 'ring-1 ring-blue-500 ring-offset-2' : ''} ${isLocked ? 'pointer-events-none' : ''}`} 
+                                        style={{ 
+                                            left: el.x, 
+                                            top: el.y, 
+                                            width: el.type === 'text' ? 'auto' : el.width, 
+                                            height: el.type === 'text' ? 'auto' : el.height, 
+                                            zIndex: el.zIndex, 
+                                            cursor: (isCtrlPressed || activeTool === 'mark') ? 'none' : (activeTool === 'select' ? (isLocked ? 'default' : 'move') : 'default'), 
+                                            whiteSpace: el.type === 'text' ? 'nowrap' : 'normal' 
+                                        }} 
+                                        onMouseDown={(e) => !isLocked && handleElementMouseDown(e, el.id)} 
+                                        onDoubleClick={() => { if (el.type === 'text') { setEditingTextId(el.id); } else if (el.url) { setPreviewUrl(el.url); } }}
+                                    >
                                         {(isSelected || isDraggingElement) && editingTextId !== el.id && (<div className="absolute -top-8 right-0 bg-white shadow-md rounded-md p-1 cursor-pointer hover:bg-red-50 hover:text-red-500 z-50"><Trash2 size={14} onClick={(e) => { e.stopPropagation(); deleteSelectedElement(); }} /></div>)}
                                         {el.type === 'text' && (
                                             <div className="w-full h-full flex items-center justify-center p-2">
@@ -4058,46 +4224,68 @@ const Workspace: React.FC = () => {
                             )
                         ))}
                         {/* Markers Layer */}
-                        {markers.map((marker) => {
-                            const el = elements.find(e => e.id === marker.elementId);
-                            if (!el) return null;
-                            // During drag, use ref positions to stay in sync
-                            const dragPos = isDraggingElement ? dragOffsetsRef.current[el.id] : null;
-                            const baseX = dragPos ? dragPos.x : el.x;
-                            const baseY = dragPos ? dragPos.y : el.y;
-                            const pixelX = baseX + (el.width * marker.x / 100);
-                            const pixelY = baseY + (el.height * marker.y / 100);
-                            const adaptiveMarkerScale = Math.max(0.6, Math.min(1.2, zoom / 100));
+                        <AnimatePresence mode="popLayout">
+                            {markers.map((marker, i) => {
+                                const el = elements.find(e => e.id === marker.elementId);
+                                if (!el) return null;
+                                const dragPos = isDraggingElement ? dragOffsetsRef.current[el.id] : null;
+                                const baseX = dragPos ? dragPos.x : el.x;
+                                const baseY = dragPos ? dragPos.y : el.y;
+                                const pixelX = baseX + (el.width * marker.x / 100);
+                                const pixelY = baseY + (el.height * marker.y / 100);
 
-                            // Determine if this marker is hovered via chat chip
-                            const isHoveredInChat = hoveredChipId && inputBlocks.some(b => b.id === hoveredChipId && b.type === 'file' && b.file && (b.file as any).markerId === marker.id);
+                                const isIdMatch = (b: any) => b.type === 'file' && b.file && (b.file as any).markerId === marker.id;
+                                const isHoveredInChat = hoveredChipId && inputBlocks.some(b => b.id === hoveredChipId && isIdMatch(b));
 
-                            return (
-                                <div key={marker.id} style={{ left: pixelX, top: pixelY, transform: `translate(-50%, -100%) scale(${1 / adaptiveMarkerScale})`, transformOrigin: 'bottom center', pointerEvents: 'auto' }} className={`absolute z-50 group/marker cursor-pointer ${isHoveredInChat ? 'z-[60]' : ''}`} onClick={(e) => { e.stopPropagation(); setZoom(Math.max(100, zoom)); }}>
-                                    <motion.div
-                                        className="relative flex flex-col items-center"
-                                        initial={{ scale: 0, opacity: 0, y: 15 }}
-                                        animate={{ scale: isHoveredInChat ? 1.25 : 1, opacity: 1, y: 0 }}
-                                        whileHover={{ scale: 1.25 }}
-                                        transition={{ type: "spring", stiffness: 400, damping: 25 }}
-                                        style={{ transformOrigin: 'bottom center' }}
-                                    >
-                                        <div className={`w-[14px] h-[14px] rounded-full bg-[#3B82F6] border border-white flex items-center justify-center text-white font-bold text-[7px] relative z-10 transition-colors duration-300 ${isHoveredInChat ? 'shadow-[0_0_0_3px_rgba(59,130,246,0.3)]' : 'shadow-sm'}`}>
-                                            {marker.id}
-                                        </div>
-                                        <div className="w-0 h-0 border-l-[2px] border-l-transparent border-r-[2px] border-r-transparent border-t-[3px] border-t-[#3B82F6] -mt-[0.5px]"></div>
-                                    </motion.div>
+                                // 反向补偿画布缩放倍率，保持标记在屏幕上恒定大小
+                                const inverseScale = 100 / zoom;
 
-                                    {/* Quick Edit Pill (Dark, 800ms delay on Hover) - positioned to the right of the marker bubble */}
+                                return (
+                                    // 外层 div：负责定位 + 反向缩放（不受 framer-motion 控制）
                                     <div
-                                        className="absolute left-full top-0 ml-1.5 bg-gray-900/95 backdrop-blur-md rounded-full shadow-[0_8px_20px_rgb(0,0,0,0.15)] border border-gray-700/50 px-2.5 py-1 whitespace-nowrap opacity-0 scale-95 origin-left group-hover/marker:opacity-100 group-hover/marker:scale-100 transition-all duration-300 delay-0 group-hover/marker:delay-[800ms] flex items-center gap-1.5 z-50"
+                                        key={marker.id}
+                                        style={{
+                                            left: pixelX,
+                                            top: pixelY,
+                                            position: 'absolute',
+                                            zIndex: isHoveredInChat ? 60 : 50,
+                                            transform: `translate(-50%, -100%) scale(${inverseScale})`,
+                                            transformOrigin: 'bottom center',
+                                            pointerEvents: 'auto',
+                                        }}
+                                        className="group/marker cursor-pointer"
+                                        onClick={(e) => { e.stopPropagation(); setZoom(Math.max(100, zoom)); }}
                                     >
-                                        <span className="text-[10px] font-bold text-white tracking-wide">快捷编辑</span>
-                                        <span className="text-[9px] font-semibold text-gray-300 bg-gray-800 rounded-sm px-1 shadow-inner">Tab</span>
+                                        {/* 内层 motion.div：负责进入/退出/悬浮动画 */}
+                                        <motion.div
+                                            initial={{ scale: 3, opacity: 0 }}
+                                            animate={{
+                                                scale: isHoveredInChat ? 1.2 : 1,
+                                                opacity: 1,
+                                            }}
+                                            exit={{ scale: 0, opacity: 0 }}
+                                            whileHover={{ scale: 1.2 }}
+                                            transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                                            style={{ transformOrigin: 'bottom center' }}
+                                            className="relative flex flex-col items-center"
+                                        >
+                                            <div className={`w-[28px] h-[28px] rounded-full bg-[#3B82F6] border-2 border-white flex items-center justify-center text-white font-bold text-[12px] relative z-10 transition-shadow duration-300 ${isHoveredInChat ? 'shadow-[0_0_0_5px_rgba(59,130,246,0.35)]' : 'shadow-lg'}`}>
+                                                {i + 1}
+                                            </div>
+                                            <div className="w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[6px] border-t-[#3B82F6] -mt-[1px]"></div>
+                                        </motion.div>
+
+                                        {/* Quick Edit Pill */}
+                                        <div
+                                            className="absolute left-full top-0 ml-2 bg-gray-900/95 backdrop-blur-md rounded-full shadow-[0_8px_20px_rgb(0,0,0,0.15)] border border-gray-700/50 px-3 py-1.5 whitespace-nowrap opacity-0 scale-95 origin-left group-hover/marker:opacity-100 group-hover/marker:scale-100 transition-all duration-300 delay-0 group-hover/marker:delay-[800ms] flex items-center gap-1.5 z-50"
+                                        >
+                                            <span className="text-[11px] font-bold text-white tracking-wide">快捷编辑</span>
+                                            <span className="text-[10px] font-semibold text-gray-300 bg-gray-800 rounded-sm px-1.5 shadow-inner">Tab</span>
+                                        </div>
                                     </div>
-                                </div>
-                            )
-                        })}
+                                )
+                            })}
+                        </AnimatePresence>
                         {/* Floating Toolbars — inside transform layer for automatic pan/zoom tracking */}
                         {renderImageToolbar()}
                         {renderGenVideoToolbar()}

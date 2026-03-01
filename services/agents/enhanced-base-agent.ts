@@ -236,7 +236,13 @@ export abstract class EnhancedBaseAgent {
             totalSteps: 4,
         });
 
-        const plan = await this.analyzeAndPlan(message, context, task.input.attachments, task.input.metadata);
+        const plan = await this.analyzeAndPlan(
+            message, 
+            context, 
+            task.input.attachments, 
+            task.input.uploadedAttachments,
+            task.input.metadata
+        );
 
         // 1.5 修复: 顶层键名大小写和别名纠正 (防止 LLM 输出 lowercase 的 keys 或常用别名)
         if (plan && typeof plan === 'object') {
@@ -482,6 +488,7 @@ export abstract class EnhancedBaseAgent {
         message: string,
         context: ProjectContext,
         attachments?: File[],
+        uploadedAttachments?: string[],
         metadata?: Record<string, any>
     ): Promise<any> {
         try {
@@ -540,12 +547,21 @@ export abstract class EnhancedBaseAgent {
 附件列表:
 ${(attachments || []).map((file, index) => {
                 const info = (file as any).markerInfo;
+                const uploadedUrl = (uploadedAttachments && uploadedAttachments[index]) ? `\n- 🌐 公网预览图: ${uploadedAttachments[index]}` : '';
+                
                 if (info) {
                     const ratio = (info.width / info.height).toFixed(2);
-                    return `- 附件 ${index + 1}: [画布选区] (尺寸: ${info.width}x${info.height}, 比例: ${ratio})。这是用户的产品图片，必须作为参考图使用。设置 referenceImage 为 'ATTACHMENT_${index}'。`;
+                    return `- 附件 ${index + 1}: [画布选区] (尺寸: ${info.width}x${info.height}, 比例: ${ratio})。这是用户的产品图片，必须作为参考图使用。设置 referenceImage 为 'ATTACHMENT_${index}'。${uploadedUrl}`;
                 }
-                return `- 附件 ${index + 1}: ${file.name} (${file.type})。引用方式: 'ATTACHMENT_${index}'`;
+                return `- 附件 ${index + 1}: ${file.name} (${file.type})。引用方式: 'ATTACHMENT_${index}'${uploadedUrl}`;
             }).join('\n')}
+
+对话历史 (Context):
+${(context.conversationHistory || []).map(msg => {
+    const roleName = msg.role === 'user' ? '用户' : '智能助手';
+    const attachmentsText = (msg.attachments && msg.attachments.length > 0) ? ` [附图/素材: ${msg.attachments.join(', ')}]` : '';
+    return `${roleName}: ${msg.text}${attachmentsText}`;
+}).join('\n')}
 
 可用技能: ${this.preferredSkills.join(', ')}
 ${smartEditSection}

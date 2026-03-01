@@ -217,7 +217,7 @@ const Home: React.FC<{ onExit?: () => void }> = ({ onExit }) => {
         </button>
       )}
 
-      <main className="pt-24 px-[10%] max-w-7xl mx-auto flex flex-col items-center">
+      <main className="pt-20 lg:pt-24 px-4 sm:px-10 lg:px-[10%] max-w-7xl mx-auto flex flex-col items-center pb-32 lg:pb-10">
         <div className="h-8"></div>
 
         <motion.div
@@ -316,10 +316,10 @@ const Home: React.FC<{ onExit?: () => void }> = ({ onExit }) => {
 
                   <button
                     onClick={() => setAgentMode(!agentMode)}
-                    className={`h-9 px-4 rounded-full border flex items-center gap-1.5 text-sm font-medium transition ${
+                    className={`h-9 px-4 rounded-full border flex items-center gap-1.5 text-sm font-medium transition-all duration-300 ${
                       agentMode
-                        ? "bg-blue-50 border-blue-300 text-blue-600"
-                        : "bg-white border-blue-400 text-blue-500 hover:bg-blue-50"
+                        ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                        : "bg-white border-border text-muted-foreground hover:bg-muted hover:text-foreground"
                     }`}
                   >
                     <Sparkles size={14} />
