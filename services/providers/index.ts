@@ -44,6 +44,14 @@ const resolveVideoModel = (model: string): string => {
 };
 
 const resolveImageModel = (model: string): string => {
+  // 兜底修复：历史错误模型名会触发代理 "No available channels"
+  if (!model || model === 'Auto') return 'Nano Banana Pro';
+  const lower = model.toLowerCase();
+  if (lower === 'gemini-3-pro-image-preview') return 'Nano Banana Pro';
+  if (lower === 'gemini-3.1-flash-image-preview') return 'NanoBanana2';
+  if (lower === 'doubao-seedream-5-0-260128') return 'Seedream5.0';
+  if (lower.includes('gemini-1.5-pro-image-preview-tok')) return 'Nano Banana Pro';
+  if (lower.includes('1.5-pro-image-preview') || lower.includes('1.5-flash-image-preview')) return 'Nano Banana Pro';
   return model;
 };
 

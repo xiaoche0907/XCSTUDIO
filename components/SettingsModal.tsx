@@ -23,6 +23,7 @@ interface SettingsModalProps {
 
 type ApiProvider = 'gemini' | 'yunwu' | 'custom';
 type SettingsTab = 'api' | 'mapping' | 'hosting' | 'advanced' | 'storage' | 'about';
+const AUTO_IMAGE_OPTION_ID = 'Auto';
 
 const RECOMMENDED_MODELS = {
     script: [
@@ -119,6 +120,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     // Modal / Editing state
     const [editingProvider, setEditingProvider] = useState<ApiProviderConfig | null>(null);
     const [isKeysVisible, setIsKeysVisible] = useState(false);
+    const [showImgbbKeys, setShowImgbbKeys] = useState(false);
+    const [showCustomHostKeys, setShowCustomHostKeys] = useState(false);
+
+    const normalizeImageSelection = (models: string[]): string[] => {
+        if (!Array.isArray(models) || models.length === 0) return [AUTO_IMAGE_OPTION_ID];
+        if (models.includes(AUTO_IMAGE_OPTION_ID)) return [AUTO_IMAGE_OPTION_ID];
+        return [models[0]];
+    };
 
     useEffect(() => {
         if (isOpen) {
@@ -128,7 +137,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             setReplicateKey(loaded.replicateKey);
             setKlingKey(loaded.klingKey);
             setSelectedScriptModels(loaded.selectedScriptModels);
-            setSelectedImageModels(loaded.selectedImageModels);
+            setSelectedImageModels(normalizeImageSelection(loaded.selectedImageModels));
             setSelectedVideoModels(loaded.selectedVideoModels);
             setVisualContinuity(loaded.visualContinuity);
             setSystemModeration(loaded.systemModeration);
@@ -196,7 +205,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 replicateKey,
                 klingKey,
                 selectedScriptModels,
-                selectedImageModels,
+                selectedImageModels: normalizeImageSelection(selectedImageModels),
                 selectedVideoModels,
                 visualContinuity,
                 systemModeration,
@@ -260,7 +269,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
         if (category === 'script') {
             setSelectedScriptModels(prev => prev.includes(modelId) ? prev.filter(id => id !== modelId) : [...prev, modelId]);
         } else if (category === 'image') {
-            setSelectedImageModels(prev => prev.includes(modelId) ? prev.filter(id => id !== modelId) : [...prev, modelId]);
+            if (modelId === AUTO_IMAGE_OPTION_ID) {
+                setSelectedImageModels([AUTO_IMAGE_OPTION_ID]);
+            } else {
+                setSelectedImageModels([modelId]);
+            }
         } else if (category === 'video') {
             setSelectedVideoModels(prev => prev.includes(modelId) ? prev.filter(id => id !== modelId) : [...prev, modelId]);
         }
@@ -548,7 +561,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                                                                             <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">热门推荐 (Hot Models)</span>
                                                                         </div>
                                                                         <div className="flex flex-wrap gap-2">
-                                                                            {RECOMMENDED_MODELS[cat].map(hot => {
+                                                                            {(cat === 'image'
+                                                                                ? [{ id: AUTO_IMAGE_OPTION_ID, name: '自动选择 (Gemini Pro)', brand: 'Google' }, ...RECOMMENDED_MODELS[cat]]
+                                                                                : RECOMMENDED_MODELS[cat]
+                                                                            ).map(hot => {
                                                                                 const isSelected = (cat === 'script' ? selectedScriptModels : cat === 'image' ? selectedImageModels : selectedVideoModels).includes(hot.id);
                                                                                 // Only show if available in current provider's list OR it's a known placeholder
                                                                                 return (
@@ -569,7 +585,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                                                                     </div>
 
                                                                     <div className="grid grid-cols-2 gap-4 max-h-[500px] overflow-y-auto pr-4 no-scrollbar pb-10">
-                                                                        {filteredModels.slice(0, visibleCount).map(m => (
+                                                                        {(cat === 'image'
+                                                                            ? [{ id: AUTO_IMAGE_OPTION_ID, name: AUTO_IMAGE_OPTION_ID, brand: 'Google', category: 'image', provider: activeProvider.name } as ModelInfo, ...filteredModels]
+                                                                            : filteredModels
+                                                                        ).slice(0, visibleCount).map(m => (
                                                                             <ModelCard
                                                                                 key={m.id}
                                                                                 model={m}
@@ -636,13 +655,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                                                     />
                                                 </div>
                                                 <div className="space-y-4">
-                                                    <div className="text-xs font-black text-gray-800 ml-1">API Key</div>
-                                                    <SettingsInput 
-                                                        type="password" 
-                                                        value={imageHost.imgbbKey} // cspell:disable-line
-                                                        onChange={(e) => imageHost.actions.setImgbbKey(e.target.value)} // cspell:disable-line
-                                                        placeholder="从 imgbb.com 获取您的 API Key" // cspell:disable-line
-                                                    />
+                                                    <div className="text-xs font-black text-gray-800 ml-1">API Key (每行一个，轮询)</div>
+                                                    <div className="relative">
+                                                        <textarea
+                                                            value={imageHost.imgbbKey} // cspell:disable-line
+                                                            onChange={(e) => imageHost.actions.setImgbbKey(e.target.value)} // cspell:disable-line
+                                                            placeholder="支持多 Key，换行分隔轮询"
+                                                            rows={4}
+                                                            className="w-full bg-muted/50 border border-border/80 text-foreground text-sm rounded-md focus:ring-4 focus:ring-primary/10 focus:border-primary focus:bg-card block px-3 py-2 pr-12 outline-none transition-all placeholder:text-muted-foreground/50 resize-y min-h-[96px]"
+                                                            style={{ WebkitTextSecurity: showImgbbKeys ? 'none' : 'disc' } as any}
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setShowImgbbKeys(v => !v)}
+                                                            className="absolute top-2.5 right-2.5 w-8 h-8 rounded-md flex items-center justify-center text-gray-500 hover:text-black hover:bg-gray-100 transition"
+                                                            title={showImgbbKeys ? '隐藏密钥' : '显示密钥'}
+                                                        >
+                                                            {showImgbbKeys ? <EyeOff size={16} /> : <Eye size={16} />}
+                                                        </button>
+                                                    </div>
                                                     <p className="text-[10px] text-gray-400 px-1 italic">上传用于多模态识别的临时图片，主要用于「视觉读取」功能。ImgBB 提供免费额度，适合直接配置使用。</p> {/* cspell:disable-line */}
                                                 </div>
                                             </div>
@@ -674,13 +705,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                                                         />
                                                     </div>
                                                     <div className="space-y-2">
-                                                        <div className="text-xs font-black text-gray-800 ml-1">API Key / Token</div>
-                                                        <SettingsInput 
-                                                            type="password"
-                                                            value={imageHost.customConfig.apiKey} 
-                                                            onChange={(e) => imageHost.actions.setCustomConfig({ apiKey: e.target.value })} 
-                                                            placeholder="密钥字符" 
-                                                        />
+                                                        <div className="text-xs font-black text-gray-800 ml-1">API Key / Token (每行一个，轮询)</div>
+                                                        <div className="relative">
+                                                            <textarea
+                                                                value={imageHost.customConfig.apiKey}
+                                                                onChange={(e) => imageHost.actions.setCustomConfig({ apiKey: e.target.value })}
+                                                                placeholder="支持多 Key，换行分隔轮询"
+                                                                rows={4}
+                                                                className="w-full bg-muted/50 border border-border/80 text-foreground text-sm rounded-md focus:ring-4 focus:ring-primary/10 focus:border-primary focus:bg-card block px-3 py-2 pr-12 outline-none transition-all placeholder:text-muted-foreground/50 resize-y min-h-[96px]"
+                                                                style={{ WebkitTextSecurity: showCustomHostKeys ? 'none' : 'disc' } as any}
+                                                            />
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setShowCustomHostKeys(v => !v)}
+                                                                className="absolute top-2.5 right-2.5 w-8 h-8 rounded-md flex items-center justify-center text-gray-500 hover:text-black hover:bg-gray-100 transition"
+                                                                title={showCustomHostKeys ? '隐藏密钥' : '显示密钥'}
+                                                            >
+                                                                {showCustomHostKeys ? <EyeOff size={16} /> : <Eye size={16} />}
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                     <div className="space-y-2">
                                                         <div className="text-xs font-black text-gray-800 ml-1">响应解析路径 (JSON Path)</div>

@@ -38,6 +38,7 @@ export function useAgentOrchestrator(options: UseAgentOrchestratorOptions) {
   const { setCurrentTask, setIsAgentMode } = useAgentStore(s => s.actions);
 
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isUploadingAttachments, setIsUploadingAttachments] = useState(false);
   const messageQueue = useRef<Array<{ message: string; attachments?: File[] }>>([]);
 
   const withTimeout = useCallback(async <T,>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> => {
@@ -132,6 +133,7 @@ export function useAgentOrchestrator(options: UseAgentOrchestratorOptions) {
         const hostProvider = useImageHostStore.getState().selectedProvider;
         if (hostProvider !== 'none') {
           console.log('[useAgentOrchestrator] Uploading attachments to host...');
+          setIsUploadingAttachments(true);
           // 更新状态提示用户
           setCurrentTask({
             id: `upload-${Date.now()}`,
@@ -144,16 +146,34 @@ export function useAgentOrchestrator(options: UseAgentOrchestratorOptions) {
           });
 
           try {
-            uploadedUrls = await Promise.all(attachments.map(file => uploadImage(file)));
-            console.log('[useAgentOrchestrator] Upload success:', uploadedUrls);
-            
-            // 回填公网 URL 到 Store 中的消息附件 (Backfill public URLs to message attachments in Store)
-            if (userMessageId && uploadedUrls.length > 0) {
-              useAgentStore.getState().actions.updateMessageAttachments(userMessageId, uploadedUrls);
-              console.log('[useAgentOrchestrator] Updated message attachments with public URLs for:', userMessageId);
+            const uploadResults = await Promise.allSettled(
+              attachments.map((file) => uploadImage(file))
+            );
+            const failedUploads = uploadResults.filter(
+              (result): result is PromiseRejectedResult => result.status === 'rejected'
+            );
+
+            if (failedUploads.length > 0) {
+              throw new Error('图片上传失败，请检查网络或重新上传');
             }
-          } catch (uploadError) {
-            console.error('[useAgentOrchestrator] Upload failed:', uploadError);
+
+            uploadedUrls = uploadResults
+              .filter((result): result is PromiseFulfilledResult<string> => result.status === 'fulfilled')
+              .map((result) => result.value)
+              .filter((url) => /^https?:\/\//i.test(url));
+
+            if (uploadedUrls.length !== attachments.length) {
+              throw new Error('图片上传结果异常，请重新上传后重试');
+            }
+
+            console.log('[useAgentOrchestrator] Upload success:', uploadedUrls);
+
+            // 上传成功后回填为真实公网 URL，避免后续上下文使用 blob: 占位链接
+            if (userMessageId) {
+              useAgentStore.getState().actions.updateMessageAttachments(userMessageId, uploadedUrls);
+            }
+          } finally {
+            setIsUploadingAttachments(false);
           }
         }
       }
@@ -303,13 +323,18 @@ export function useAgentOrchestrator(options: UseAgentOrchestratorOptions) {
       console.error('Agent Pipeline Failure', { stage: 'processMessage', error });
       console.error('生成流中断:', error);
       console.error('[useAgentOrchestrator] Error:', error);
+      const rawMessage = error instanceof Error ? error.message : String(error || '');
+      const imageFailure = /图片|image|upload|base64|attachment|mime|格式/i.test(rawMessage);
+      const failMessage = imageFailure
+        ? '图片处理失败，请检查网络或重新上传'
+        : '抱歉，生成过程中遇到网络或解析错误，请重试。';
       const errorTask: AgentTask = {
         id: `task-${Date.now()}`,
         agentId: 'coco' as AgentType,
         status: 'failed',
         input: { message, context: projectContext },
         output: {
-          message: '抱歉，生成过程中遇到网络或解析错误，请重试。'
+          message: failMessage
         },
         createdAt: Date.now(),
         updatedAt: Date.now()
@@ -320,6 +345,7 @@ export function useAgentOrchestrator(options: UseAgentOrchestratorOptions) {
       if (executingTimer) {
         clearTimeout(executingTimer);
       }
+      setIsUploadingAttachments(false);
       setIsProcessing(false);
 
       if (messageQueue.current.length > 0) {
@@ -428,6 +454,7 @@ export function useAgentOrchestrator(options: UseAgentOrchestratorOptions) {
     currentTask,
     isAgentMode,
     isProcessing,
+    isUploadingAttachments,
     processMessage,
     executeProposal,
     addAssetsToCanvas,

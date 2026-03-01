@@ -99,6 +99,7 @@ export interface ChatMessage {
   text: string;
   timestamp: number;
   attachments?: string[]; // Array of base64 images
+  error?: boolean;
   relatedMarkerId?: string;
   // Agent structured data (Lovart-style)
   agentData?: {

@@ -88,6 +88,25 @@ const VIDEO_RATIOS = [
     { label: '1:1', value: '1:1', icon: 'square' },
 ];
 
+const DEFAULT_AUTO_IMAGE_MODEL: ImageModel = 'Nano Banana Pro';
+
+const PREFERRED_IMAGE_MODEL_TO_STORAGE_ID: Partial<Record<ImageModel, string>> = {
+    'Nano Banana Pro': 'gemini-3-pro-image-preview',
+    'NanoBanana2': 'gemini-3.1-flash-image-preview',
+    'Seedream5.0': 'doubao-seedream-5-0-260128',
+};
+
+const STORAGE_ID_TO_PREFERRED_IMAGE_MODEL: Record<string, ImageModel> = {
+    'gemini-3-pro-image-preview': 'Nano Banana Pro',
+    'Nano Banana Pro': 'Nano Banana Pro',
+    'gemini-3.1-flash-image-preview': 'NanoBanana2',
+    'NanoBanana2': 'NanoBanana2',
+    'doubao-seedream-5-0-260128': 'Seedream5.0',
+    'Seedream5.0': 'Seedream5.0',
+    'GPT Image 1.5': 'GPT Image 1.5',
+    'Flux.2 Max': 'Flux.2 Max',
+};
+
 type ToolType = 'select' | 'hand' | 'mark' | 'insert' | 'shape' | 'text' | 'brush' | 'eraser';
 
 // Utility to compress image to max dimensions to save storage and improve performance
@@ -400,9 +419,41 @@ const Workspace: React.FC = () => {
     const [showModelPreference, setShowModelPreference] = useState(false);
     const [modelPreferenceTab, setModelPreferenceTab] = useState<'image' | 'video' | '3d'>('image');
     const [autoModelSelect, setAutoModelSelect] = useState(true);
-    const [preferredImageModel, setPreferredImageModel] = useState<ImageModel>('Nano Banana Pro');
+    const [preferredImageModel, setPreferredImageModel] = useState<ImageModel>(DEFAULT_AUTO_IMAGE_MODEL);
     const [preferredVideoModel, setPreferredVideoModel] = useState<VideoModel>('Veo 3.1');
     const [preferred3DModel, setPreferred3DModel] = useState('Auto');
+    const activeImageModel: ImageModel = autoModelSelect ? DEFAULT_AUTO_IMAGE_MODEL : preferredImageModel;
+
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem('setting_image_models');
+            const parsed = JSON.parse(raw || '[]');
+            const selected = Array.isArray(parsed) ? parsed.filter(v => typeof v === 'string') : [];
+            const first = (selected[0] || '').trim();
+
+            if (!first || first === 'Auto' || first === 'gemini-3-pro-image-preview' || first === 'Nano Banana Pro') {
+                setAutoModelSelect(true);
+                setPreferredImageModel(DEFAULT_AUTO_IMAGE_MODEL);
+                return;
+            }
+
+            const mapped = STORAGE_ID_TO_PREFERRED_IMAGE_MODEL[first];
+            if (mapped) {
+                setPreferredImageModel(mapped);
+                setAutoModelSelect(false);
+            }
+        } catch {
+            setAutoModelSelect(true);
+            setPreferredImageModel(DEFAULT_AUTO_IMAGE_MODEL);
+        }
+    }, []);
+
+    useEffect(() => {
+        const selectedImageModels = autoModelSelect
+            ? ['Auto']
+            : [PREFERRED_IMAGE_MODEL_TO_STORAGE_ID[preferredImageModel] || preferredImageModel];
+        localStorage.setItem('setting_image_models', JSON.stringify(selectedImageModels));
+    }, [autoModelSelect, preferredImageModel]);
 
     // Drag-and-drop state
     const [isDragOver, setIsDragOver] = useState(false);
@@ -678,7 +729,7 @@ const Workspace: React.FC = () => {
             width: 512,
             height: 512,
             genPrompt: prompt,
-            genModel: preferredImageModel,
+            genModel: activeImageModel,
             zIndex: elements.length + 10, // Ensure it's on top
             isGenerating: true
         };
@@ -713,7 +764,7 @@ const Workspace: React.FC = () => {
 
             const resultUrl = await imageGenSkill({
                 prompt: prompt,
-                model: preferredImageModel,
+                model: activeImageModel,
                 aspectRatio: '1:1',
                 referenceImages: referenceImages.length > 0 ? referenceImages : undefined
             });
@@ -728,7 +779,7 @@ const Workspace: React.FC = () => {
                     text: `已为您完成智能生成：${prompt.slice(0, 30)}${prompt.length > 30 ? '...' : ''}`,
                     timestamp: Date.now(),
                     agentData: {
-                        model: preferredImageModel,
+                        model: activeImageModel,
                         title: '智能生成',
                         imageUrls: [resultUrl]
                     }
@@ -744,7 +795,7 @@ const Workspace: React.FC = () => {
 
     // Agent orchestration
     const projectContext = useProjectContext(id || '', projectTitle, elements);
-    const { currentTask, processMessage, executeProposal } = useAgentOrchestrator({
+    const { currentTask, isUploadingAttachments, processMessage, executeProposal } = useAgentOrchestrator({
         projectContext,
         canvasState: { elements, pan, zoom, showAssistant },
         onElementsUpdate: setElements,
@@ -753,6 +804,21 @@ const Workspace: React.FC = () => {
     });
 
     const handleSend = async (overridePrompt?: string, overrideAttachments?: File[], overrideWeb?: boolean, skillData?: any) => {
+        if (isUploadingAttachments) {
+            addMessage({
+                id: `upload-wait-${Date.now()}`,
+                role: 'model',
+                text: '图片正在上传，请稍候',
+                timestamp: Date.now(),
+                error: true,
+            });
+            return;
+        }
+
+        if (isTyping) {
+            return;
+        }
+
         // 1. 取出当前输入块
         const currentBlocks = useAgentStore.getState().inputBlocks;
         const text = overridePrompt ?? currentBlocks.filter(b => b.type === 'text').map(b => b.text).join(' ').trim();
@@ -766,12 +832,14 @@ const Workspace: React.FC = () => {
             setActiveConversationId(`session-${Date.now()}`);
         }
 
+        const attachmentPreviews = attachments.map(f => URL.createObjectURL(f));
+
         // 2. 构造并将用户消息添加至 Store
         const userMsg: ChatMessage = {
             id: Date.now().toString(),
             role: 'user',
             text,
-            attachments: attachments.map(f => URL.createObjectURL(f)),
+            attachments: attachmentPreviews,
             timestamp: Date.now(),
             skillData
         };
@@ -816,6 +884,7 @@ const Workspace: React.FC = () => {
                     role: 'model',
                     text: result.output.message || '已完成任务。',
                     timestamp: Date.now(),
+                    error: result.status === 'failed',
                     agentData: {
                         model: result.agentId,
                         title: '智能助理',
@@ -832,11 +901,14 @@ const Workspace: React.FC = () => {
             }
         } catch (error) {
             console.error('[Workspace] handleSend failed:', error);
+            const rawError = error instanceof Error ? error.message : String(error || '');
+            const isImageError = /图片|image|upload|base64|attachment|mime|格式/i.test(rawError);
             addMessage({
                 id: `err-${Date.now()}`,
                 role: 'model',
-                text: '处理请求时遇到问题，请稍后重试。',
+                text: isImageError ? '图片处理失败，请检查网络或重新上传' : '处理请求时遇到问题，请稍后重试。',
                 timestamp: Date.now(),
+                error: true,
             });
         } finally {
             setIsTyping(false);
@@ -1805,7 +1877,7 @@ const Workspace: React.FC = () => {
     };
 
     const addText = () => { const containerW = window.innerWidth - (showAssistant ? 480 : 0); const containerH = window.innerHeight; const centerX = (containerW / 2 - pan.x) / (zoom / 100); const centerY = (containerH / 2 - pan.y) / (zoom / 100); const newElement: CanvasElement = { id: Date.now().toString(), type: 'text', text: 'Type something...', x: centerX - 100, y: centerY - 25, width: 200, height: 50, fontSize: 90, fontFamily: 'Inter', fontWeight: 400, fillColor: '#000000', strokeColor: 'transparent', textAlign: 'left', zIndex: elements.length + 1 }; const newElements = [...elements, newElement]; setElements(newElements); saveToHistory(newElements, markers); setSelectedElementId(newElement.id); };
-    const addGenImage = () => { const containerW = window.innerWidth - (showAssistant ? 480 : 0); const containerH = window.innerHeight; const centerX = (containerW / 2 - pan.x) / (zoom / 100); const centerY = (containerH / 2 - pan.y) / (zoom / 100); const newElement: CanvasElement = { id: Date.now().toString(), type: 'gen-image', x: centerX - 512, y: centerY - 512, width: 1024, height: 1024, zIndex: elements.length + 1, genModel: 'Nano Banana Pro', genAspectRatio: '1:1', genResolution: '1K', genPrompt: '' }; const newElements = [...elements, newElement]; setElements(newElements); saveToHistory(newElements, markers); setSelectedElementId(newElement.id); };
+    const addGenImage = () => { const containerW = window.innerWidth - (showAssistant ? 480 : 0); const containerH = window.innerHeight; const centerX = (containerW / 2 - pan.x) / (zoom / 100); const centerY = (containerH / 2 - pan.y) / (zoom / 100); const newElement: CanvasElement = { id: Date.now().toString(), type: 'gen-image', x: centerX - 512, y: centerY - 512, width: 1024, height: 1024, zIndex: elements.length + 1, genModel: activeImageModel, genAspectRatio: '1:1', genResolution: '1K', genPrompt: '' }; const newElements = [...elements, newElement]; setElements(newElements); saveToHistory(newElements, markers); setSelectedElementId(newElement.id); };
     const addGenVideo = () => {
         const containerW = window.innerWidth - (showAssistant ? 480 : 0);
         const containerH = window.innerHeight;

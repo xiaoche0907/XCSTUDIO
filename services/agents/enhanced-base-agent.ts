@@ -106,16 +106,16 @@ const DEFAULT_EXECUTION_CONFIG: ExecutionConfig = {
 };
 
 const SKILL_TIMEOUTS: Record<string, number> = {
-  generateImage: 45_000, // 图片生成 15-30s 典型
-  smartEdit: 45_000,
-  touchEdit: 45_000,
+  generateImage: 180_000, // 图像生成在代理环境下可能需要更久
+  smartEdit: 120_000,
+  touchEdit: 120_000,
   generateVideo: 180_000, // 视频生成可能很慢
   generateCopy: 15_000, // 文本生成很快
   extractText: 15_000,
   analyzeRegion: 15_000,
   export: 30_000,
 };
-const DEFAULT_SKILL_TIMEOUT = 60_000;
+const DEFAULT_SKILL_TIMEOUT = 120_000;
 
 const IMAGE_TOOL_PARAMS_SCHEMA: ImageParamsSchema = {
   type: Type.OBJECT,

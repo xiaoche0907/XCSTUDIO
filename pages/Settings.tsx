@@ -22,6 +22,7 @@ import {
 
 type ApiProvider = 'gemini' | 'yunwu' | 'custom';
 type SettingsTab = 'api' | 'mapping' | 'hosting' | 'advanced' | 'storage' | 'about';
+const AUTO_IMAGE_OPTION_ID = 'Auto';
 
 const DEFAULT_MODEL_WHITELIST = [
     // 图片模型
@@ -116,6 +117,8 @@ const SettingsPage: React.FC = () => {
     const [selectedScriptModels, setSelectedScriptModels] = useState<string[]>([]);
     const [selectedImageModels, setSelectedImageModels] = useState<string[]>([]);
     const [selectedVideoModels, setSelectedVideoModels] = useState<string[]>([]);
+    const [showImgBBKeys, setShowImgBBKeys] = useState(false);
+    const [showCustomHostKeys, setShowCustomHostKeys] = useState(false);
 
     const [expandedCategory, setExpandedCategory] = useState<string | null>('image');
     const [visibleCount, setVisibleCount] = useState(60);
@@ -129,6 +132,12 @@ const SettingsPage: React.FC = () => {
     // Editing state
     const [editingProvider, setEditingProvider] = useState<ApiProviderConfig | null>(null);
 
+    const normalizeImageSelection = (models: string[]): string[] => {
+        if (!Array.isArray(models) || models.length === 0) return [AUTO_IMAGE_OPTION_ID];
+        if (models.includes(AUTO_IMAGE_OPTION_ID)) return [AUTO_IMAGE_OPTION_ID];
+        return [models[0]];
+    };
+
     // Image Host Store (Reactive Hook)
     const imageHost = useImageHostStore();
 
@@ -139,7 +148,7 @@ const SettingsPage: React.FC = () => {
         setReplicateKey(loaded.replicateKey);
         setKlingKey(loaded.klingKey);
         setSelectedScriptModels(loaded.selectedScriptModels);
-        setSelectedImageModels(loaded.selectedImageModels);
+        setSelectedImageModels(normalizeImageSelection(loaded.selectedImageModels));
         setSelectedVideoModels(loaded.selectedVideoModels);
         setVisualContinuity(loaded.visualContinuity);
         setSystemModeration(loaded.systemModeration);
@@ -165,6 +174,7 @@ const SettingsPage: React.FC = () => {
 
         // 自动勾选逻辑：如果模型在白名单中，且目前未被手动勾选，则自动勾选
         const autoSelect = (cat: 'script' | 'image' | 'video', currentSelected: string[], setCurrent: React.Dispatch<React.SetStateAction<string[]>>) => {
+            if (cat === 'image') return;
             const newMatches = formattedModels
                 .filter(m => m.category === cat && DEFAULT_MODEL_WHITELIST.includes(m.id) && !currentSelected.includes(m.id))
                 .map(m => m.id);
@@ -190,7 +200,7 @@ const SettingsPage: React.FC = () => {
                 replicateKey,
                 klingKey,
                 selectedScriptModels,
-                selectedImageModels,
+                selectedImageModels: normalizeImageSelection(selectedImageModels),
                 selectedVideoModels,
                 visualContinuity,
                 systemModeration,
@@ -237,7 +247,11 @@ const SettingsPage: React.FC = () => {
         if (category === 'script') {
             setSelectedScriptModels(prev => prev.includes(modelId) ? prev.filter(id => id !== modelId) : [...prev, modelId]);
         } else if (category === 'image') {
-            setSelectedImageModels(prev => prev.includes(modelId) ? prev.filter(id => id !== modelId) : [...prev, modelId]);
+            if (modelId === AUTO_IMAGE_OPTION_ID) {
+                setSelectedImageModels([AUTO_IMAGE_OPTION_ID]);
+            } else {
+                setSelectedImageModels([modelId]);
+            }
         } else if (category === 'video') {
             setSelectedVideoModels(prev => prev.includes(modelId) ? prev.filter(id => id !== modelId) : [...prev, modelId]);
         }
@@ -445,13 +459,25 @@ const SettingsPage: React.FC = () => {
                                         <SettingsCard title="ImgBB 参数" icon={<Key size={18} />}> {/* cspell:disable-line */}
                                             <div className="space-y-4 mt-4">
                                                 <div className="space-y-2">
-                                                    <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">API KEY</label>
-                                                    <SettingsInput 
-                                                        type="password" 
-                                                        value={imageHost.imgbbKey} // cspell:disable-line
-                                                        onChange={(e) => imageHost.actions.setImgbbKey(e.target.value)} // cspell:disable-line
-                                                        placeholder="输入 ImgBB API 密钥" // cspell:disable-line
-                                                    />
+                                                    <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">API KEY (每行一个，轮询)</label>
+                                                    <div className="relative">
+                                                        <textarea
+                                                            value={imageHost.imgbbKey} // cspell:disable-line
+                                                            onChange={(e) => imageHost.actions.setImgbbKey(e.target.value)} // cspell:disable-line
+                                                            placeholder="支持多 Key，换行分隔"
+                                                            rows={4}
+                                                            className="w-full bg-muted/50 border border-border/80 text-foreground text-sm rounded-md focus:ring-4 focus:ring-primary/10 focus:border-primary focus:bg-card block px-3 py-2 pr-12 outline-none transition-all placeholder:text-muted-foreground/50 resize-y min-h-[96px]"
+                                                            style={{ WebkitTextSecurity: showImgBBKeys ? 'none' : 'disc' } as any}
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setShowImgBBKeys(v => !v)}
+                                                            className="absolute top-2.5 right-2.5 w-8 h-8 rounded-md flex items-center justify-center text-gray-500 hover:text-black hover:bg-gray-100 transition"
+                                                            title={showImgBBKeys ? '隐藏密钥' : '显示密钥'}
+                                                        >
+                                                            {showImgBBKeys ? <EyeOff size={16} /> : <Eye size={16} />}
+                                                        </button>
+                                                    </div>
                                                 </div>
                                                 <p className="text-[10px] text-muted-foreground leading-relaxed px-1">
                                                     从 <a href="https://api.imgbb.com/" target="_blank" rel="noopener noreferrer" className="text-primary underline">ImgBB API</a> 获取密钥。免费版支持无限存储量。 {/* cspell:disable-line */}
@@ -472,13 +498,25 @@ const SettingsPage: React.FC = () => {
                                                     />
                                                 </div>
                                                 <div className="space-y-2">
-                                                    <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">身份验证 (Auth Token)</label>
-                                                    <SettingsInput 
-                                                        type="password" 
-                                                        value={imageHost.customConfig.apiKey} 
-                                                        onChange={(e) => imageHost.actions.setCustomConfig({ apiKey: e.target.value })} 
-                                                        placeholder="Authorization Header" 
-                                                    />
+                                                    <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">身份验证 (Auth Token，多行轮询)</label>
+                                                    <div className="relative">
+                                                        <textarea
+                                                            value={imageHost.customConfig.apiKey}
+                                                            onChange={(e) => imageHost.actions.setCustomConfig({ apiKey: e.target.value })}
+                                                            placeholder="支持多 Key，换行分隔"
+                                                            rows={4}
+                                                            className="w-full bg-muted/50 border border-border/80 text-foreground text-sm rounded-md focus:ring-4 focus:ring-primary/10 focus:border-primary focus:bg-card block px-3 py-2 pr-12 outline-none transition-all placeholder:text-muted-foreground/50 resize-y min-h-[96px]"
+                                                            style={{ WebkitTextSecurity: showCustomHostKeys ? 'none' : 'disc' } as any}
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setShowCustomHostKeys(v => !v)}
+                                                            className="absolute top-2.5 right-2.5 w-8 h-8 rounded-md flex items-center justify-center text-gray-500 hover:text-black hover:bg-gray-100 transition"
+                                                            title={showCustomHostKeys ? '隐藏密钥' : '显示密钥'}
+                                                        >
+                                                            {showCustomHostKeys ? <EyeOff size={16} /> : <Eye size={16} />}
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </SettingsCard>
@@ -537,7 +575,10 @@ const SettingsPage: React.FC = () => {
                                                         </div>
 
                                                         <div className="grid grid-cols-2 gap-4 max-h-[400px] overflow-y-auto pr-2 no-scrollbar">
-                                                            {filteredModels.slice(0, visibleCount).map(m => (
+                                                            {(cat === 'image'
+                                                                ? [{ id: AUTO_IMAGE_OPTION_ID, name: AUTO_IMAGE_OPTION_ID, brand: 'Google', category: 'image', provider: activeProvider.name } as ModelInfo, ...filteredModels]
+                                                                : filteredModels
+                                                            ).slice(0, visibleCount).map(m => (
                                                                 <ModelCard
                                                                     key={m.id}
                                                                     model={m}

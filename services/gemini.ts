@@ -862,26 +862,23 @@ export const generateImage = async (config: ImageGenerationConfig): Promise<stri
         console.log(`[generateImage] Seedream failed, falling back to Gemini model`);
     }
 
-    // Get selected models from settings (multi-select)
-    const selectedModels = JSON.parse(localStorage.getItem('setting_image_models') || '[]');
-    let targetModels = selectedModels.length > 0 ? selectedModels : [IMAGE_PRO_MODEL];
+    // 自动选择时固定优先使用 gemini-3-pro-image-preview。
+    // 仅当调用方明确传入模型偏好时，才按该偏好路由。
+    const requestedModel = (config.model || '').trim();
+    let targetModelId = IMAGE_PRO_MODEL;
 
-    const storageKeyIdx = `service_poll_index_image`;
-    let currentIdx = parseInt(localStorage.getItem(storageKeyIdx) || '0', 10);
-    if (currentIdx >= targetModels.length) currentIdx = 0;
-
-    let targetModelId = targetModels[currentIdx];
-    // Update index for next time (Round Robin across service nodes)
-    localStorage.setItem(storageKeyIdx, ((currentIdx + 1) % targetModels.length).toString());
-
-    // Map high-level model names to internal IDs if needed
-    if (targetModelId === 'Nano Banana Pro' || targetModelId === 'Auto' || !targetModelId) {
-        targetModelId = IMAGE_PRO_MODEL;
-    } else if (targetModelId === 'NanoBanana2') {
-        targetModelId = IMAGE_NANOBANANA_2_MODEL;
-    } else if (targetModelId.includes('1.5-flash')) {
-        // 强制防止回退到云雾不支持的旧 ID
-        targetModelId = IMAGE_PRO_MODEL;
+    if (requestedModel && requestedModel !== 'Auto') {
+        if (requestedModel === 'Nano Banana Pro') {
+            targetModelId = IMAGE_PRO_MODEL;
+        } else if (requestedModel === 'NanoBanana2') {
+            targetModelId = IMAGE_NANOBANANA_2_MODEL;
+        } else if (requestedModel.includes('1.5-flash')) {
+            // 强制防止回退到云雾不支持的旧 ID
+            targetModelId = IMAGE_PRO_MODEL;
+        } else {
+            // 允许上层传入已是底层 ID 的模型
+            targetModelId = requestedModel;
+        }
     }
 
     // Concurrency check: If user has multi-key, the getApiKey() will handle its own poll.
