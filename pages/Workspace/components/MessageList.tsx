@@ -85,10 +85,13 @@ export const MessageList: React.FC<MessageListProps> = ({
                         ) : (
                             <div className="w-full max-w-[85%] xl:max-w-[75%] rounded-3xl rounded-br-md border border-gray-200 bg-white px-4 py-3 shadow-sm flex flex-col gap-2 overflow-hidden">
                                 {msg.attachments && msg.attachments.length > 0 && (
-                                    <div className={`grid gap-2 ${msg.attachments.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                                    <div className="flex flex-wrap items-center gap-1.5 mb-1">
                                         {msg.attachments.map((att, i) => (
-                                            <div key={i} className="w-full rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
-                                                <img src={att} className="w-full h-auto object-cover rounded-lg" />
+                                            <div key={i} className="inline-flex items-center gap-1.5 bg-gray-50 border border-gray-100 rounded-lg pl-1 pr-2 py-0.5 select-none hover:bg-gray-100 transition duration-200 cursor-pointer shadow-sm">
+                                                <div className="w-5 h-5 rounded-sm overflow-hidden flex-shrink-0 bg-white">
+                                                    <img src={att} className="w-full h-full object-cover" />
+                                                </div>
+                                                <span className="text-[11px] text-gray-600 font-medium">参考内容 {i + 1}</span>
                                             </div>
                                         ))}
                                     </div>
@@ -120,7 +123,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                     <div className="flex items-center gap-3">
                         {/* 拟物风格 Logo 图标 */}
                         <div className="w-7 h-7 rounded-full bg-black flex items-center justify-center shadow-lg transform hover:scale-105 transition-transform duration-300">
-                             <Sparkles size={14} className="text-white fill-white/20 animate-pulse" />
+                            <Sparkles size={14} className="text-white fill-white/20 animate-pulse" />
                         </div>
                         {/* 立体文案反馈 */}
                         <div className="flex items-center gap-2 pr-4">

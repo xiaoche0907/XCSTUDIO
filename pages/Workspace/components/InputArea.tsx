@@ -561,33 +561,6 @@ export const InputArea: React.FC<InputAreaProps> = ({
                                             </div>
                                             <span className="text-[11px] text-gray-700 font-bold max-w-[100px] truncate ml-0.5">{chipLabel}</span>
                                             <button onClick={(e) => { e.stopPropagation(); removeInputBlock(block.id); setSelectedChipId(null); }} className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition opacity-0 group-hover:opacity-100 ml-0.5"><X size={10} /></button>
-
-                                            {isHovered && isSelected && file.type.startsWith('image/') && (() => {
-                                                const MAX_SIZE = 220;
-                                                const ratio = hasValidAspect ? (imageWidth / imageHeight) : 1;
-                                                let renderWidth = MAX_SIZE;
-                                                let renderHeight = MAX_SIZE;
-
-                                                if (ratio > 1) {
-                                                    renderHeight = MAX_SIZE / ratio;
-                                                } else {
-                                                    renderWidth = MAX_SIZE * ratio;
-                                                }
-
-                                                const chipRect = document.getElementById(`file-chip-${block.id}`)?.getBoundingClientRect();
-                                                const left = (chipRect?.left || 0) + (chipRect?.width || 0) / 2 - (renderWidth / 2);
-                                                const top = (chipRect?.top || 0) - renderHeight - 12;
-
-                                                return ReactDOM.createPortal(
-                                                    <div
-                                                        className="fixed z-[9999] pointer-events-none bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden"
-                                                        style={{ left, top, width: renderWidth, height: renderHeight }}
-                                                    >
-                                                        <img src={URL.createObjectURL(file)} className="w-full h-full object-contain bg-white" />
-                                                    </div>,
-                                                    document.body
-                                                );
-                                            })()}
                                         </div>
                                     );
                                 }
