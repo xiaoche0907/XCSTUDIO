@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { X, Save, Key, ExternalLink } from 'lucide-react';
+import { X, Save, Key, ExternalLink, Eye, EyeOff } from 'lucide-react';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -9,15 +9,23 @@ interface SettingsModalProps {
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const [polloKey, setPolloKey] = useState('');
+  const [yunwuKey, setYunwuKey] = useState('');
+  const [showYunwuKey, setShowYunwuKey] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
 
   useEffect(() => {
-    const stored = localStorage.getItem('pollo_api_key');
-    if (stored) setPolloKey(stored);
+    const storedPollo = localStorage.getItem('pollo_api_key');
+    if (storedPollo) setPolloKey(storedPollo);
+    
+    const storedYunwu = localStorage.getItem('yunwu_api_key');
+    if (storedYunwu) setYunwuKey(storedYunwu);
   }, [isOpen]);
 
   const handleSave = () => {
     localStorage.setItem('pollo_api_key', polloKey.trim());
+    localStorage.setItem('yunwu_api_key', yunwuKey.trim());
+    // Ensure yunwu is the active provider if we are saving these settings
+    localStorage.setItem('api_provider', 'yunwu');
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 2000);
     setTimeout(onClose, 500);
@@ -67,7 +75,40 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 />
             </div>
             <p className="text-[11px] text-slate-500 leading-relaxed">
-                用于激活 <strong>Wan 2.1 / Wan 2.5</strong> 视频生成模型。密钥仅保存在您的浏览器本地存储中，不会上传至 SunStudio 服务器。
+                用于激活 <strong>Wan 2.1 / Wan 2.5</strong> 视频生成模型。密钥仅保存在您的浏览器本地存储中。
+            </p>
+          </div>
+
+          <div className="space-y-4 pt-4 border-t border-white/5">
+            <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">云雾 API Key (Yunwu.ai)</label>
+                <a href="https://yunwu.ai/" target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[10px] text-cyan-400 hover:text-cyan-300 transition-colors">
+                    <span>获取 Key</span>
+                    <ExternalLink size={10} />
+                </a>
+            </div>
+            
+            <div className="relative group">
+                <div className="absolute top-3 left-3 pointer-events-none">
+                    <span className="text-slate-500 font-mono text-xs">sk-</span>
+                </div>
+                <textarea 
+                    autoComplete="off"
+                    className={`w-full bg-black/30 border border-white/10 rounded-xl py-3 pl-10 pr-10 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-cyan-500/50 transition-all font-mono min-h-[120px] custom-scrollbar ${!showYunwuKey ? 'blur-sm select-none' : ''}`}
+                    placeholder="按行输入您的云雾 API Key (一行一个)..."
+                    value={yunwuKey}
+                    onChange={(e) => setYunwuKey(e.target.value)}
+                />
+                <button 
+                    onClick={() => setShowYunwuKey(!showYunwuKey)}
+                    className="absolute top-3 right-3 p-1.5 text-slate-500 hover:text-cyan-400 transition-colors bg-white/5 rounded-lg border border-white/10"
+                    title={showYunwuKey ? "隐藏密码" : "显示密码"}
+                >
+                    {showYunwuKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+            </div>
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+                用于激活 <strong>Gemini 3 Pro / Nnaobanana2</strong> 及视频模型。支持多 Key 轮询（一行一个）。密钥仅保存在本地。
             </p>
           </div>
         </div>

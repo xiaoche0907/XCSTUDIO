@@ -6,6 +6,27 @@
 import { GeneratedAsset } from '../types/agent.types';
 import { CanvasElement } from '../types';
 
+const IMAGE_FIT_VIEWPORT_RATIO = 0.6;
+const IMAGE_FIT_MAX_WIDTH = 1280;
+const IMAGE_FIT_MAX_HEIGHT = 900;
+
+function calcDisplaySize(
+  width: number,
+  height: number,
+  viewportWidth: number,
+  viewportHeight: number,
+): { width: number; height: number } {
+  const safeWidth = Math.max(1, width);
+  const safeHeight = Math.max(1, height);
+  const maxW = Math.min(viewportWidth * IMAGE_FIT_VIEWPORT_RATIO, IMAGE_FIT_MAX_WIDTH);
+  const maxH = Math.min(viewportHeight * IMAGE_FIT_VIEWPORT_RATIO, IMAGE_FIT_MAX_HEIGHT);
+  const scale = Math.min(maxW / safeWidth, maxH / safeHeight, 1);
+  return {
+    width: Math.max(1, Math.round(safeWidth * scale)),
+    height: Math.max(1, Math.round(safeHeight * scale)),
+  };
+}
+
 /**
  * 将单个GeneratedAsset转换为CanvasElement
  */
@@ -15,6 +36,8 @@ export function assetToCanvasElement(
     x?: number;
     y?: number;
     zIndex?: number;
+    viewportWidth?: number;
+    viewportHeight?: number;
   } = {}
 ): CanvasElement {
   const baseElement = {
@@ -27,12 +50,19 @@ export function assetToCanvasElement(
   if (asset.type === 'image') {
     const w = asset.metadata.width || 512;
     const h = asset.metadata.height || 512;
+    const fitted = calcDisplaySize(
+      w,
+      h,
+      options.viewportWidth || 1600,
+      options.viewportHeight || 900,
+    );
     return {
       ...baseElement,
       type: 'gen-image',
       url: asset.url,
-      width: w,
-      height: h,
+      originalUrl: asset.url,
+      width: fitted.width,
+      height: fitted.height,
       genPrompt: asset.metadata.prompt,
       genModel: asset.metadata.model as any,
       genAspectRatio: w === h ? '1:1' : `${w}:${h}`,
@@ -66,13 +96,16 @@ export function assetToCanvasElement(
 export function assetsToCanvasElements(
   assets: GeneratedAsset[],
   startPosition: { x: number; y: number } = { x: 100, y: 100 },
-  startZIndex: number = 1
+  startZIndex: number = 1,
+  viewportSize: { width: number; height: number } = { width: 1600, height: 900 },
 ): CanvasElement[] {
   return assets.map((asset, index) => {
     return assetToCanvasElement(asset, {
       x: startPosition.x + (index * 50),
       y: startPosition.y + (index * 50),
-      zIndex: startZIndex + index
+      zIndex: startZIndex + index,
+      viewportWidth: viewportSize.width,
+      viewportHeight: viewportSize.height,
     });
   });
 }
@@ -111,8 +144,11 @@ export function assetsToCanvasElementsAtCenter(
     const col = index % cols;
     
     // 动态间距，基于资产尺寸
-    const w = asset.metadata.width || 512;
-    const h = asset.metadata.height || 512;
+    const sourceW = asset.metadata.width || 512;
+    const sourceH = asset.metadata.height || 512;
+    const fitted = calcDisplaySize(sourceW, sourceH, canvasWidth, canvasHeight);
+    const w = fitted.width;
+    const h = fitted.height;
     const spacingX = w + 40;
     const spacingY = h + 40;
 
@@ -122,7 +158,9 @@ export function assetsToCanvasElementsAtCenter(
     return assetToCanvasElement(asset, {
       x: center.x + offsetX - (w / 2),
       y: center.y + offsetY - (h / 2),
-      zIndex: startZIndex + index
+      zIndex: startZIndex + index,
+      viewportWidth: canvasWidth,
+      viewportHeight: canvasHeight,
     });
   });
 }

@@ -54,7 +54,13 @@
     "pendings",
     "conv",
     "AABB",
-    "nums"
+    "nums",
+    "Nnaobanana",
+    "Nnaobanana2",
+    "Pollo",
+    "pollo",
+    "Kore",
+    "Puck"
   ],
   "ignorePaths": ["node_modules", "dist", "public"]
 }

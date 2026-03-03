@@ -113,7 +113,7 @@
 
 📖 **完整配置指南**: [API-CONFIGURATION-GUIDE.md](./API-CONFIGURATION-GUIDE.md)
 
-## � 快捷键指南
+## ⌨️ 快捷键指南
 
 - `Space` + 拖拽: 平移画布
 - `Ctrl` + 滚轮: 缩放画布

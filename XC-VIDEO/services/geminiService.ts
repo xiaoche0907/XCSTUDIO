@@ -40,9 +40,20 @@ const getClient = () => {
         ? localStorage.getItem('gemini_api_key') || ''
         : localStorage.getItem('yunwu_api_key') || '';
 
-    const apiKey = process.env.API_KEY || providerApiKey || legacyKey;
-    if (!apiKey) {
+    const rawApiKey = process.env.API_KEY || providerApiKey || legacyKey;
+    
+    if (!rawApiKey) {
         throw new Error("API Key is missing. Please configure your API Key in XC-STUDIO Settings.");
+    }
+
+    // --- Polling / Random Selection Logic ---
+    let apiKey = rawApiKey;
+    if (rawApiKey.includes('\n')) {
+        const keys = rawApiKey.split('\n').map(k => k.trim()).filter(k => !!k);
+        if (keys.length > 0) {
+            // Pick a random key from the list
+            apiKey = keys[Math.floor(Math.random() * keys.length)];
+        }
     }
 
     const normalizedBaseUrl = providerBaseUrl.replace(/\/+$/, '').replace(/\/v\d+(beta)?$/i, '');
@@ -391,7 +402,14 @@ export const generateImageFromText = async (
     const count = options.count || 1;
 
     // Fallback/Correction for model names
-    const effectiveModel = model.includes('imagen') ? 'imagen-3.0-generate-002' : 'gemini-2.5-flash-image';
+    let effectiveModel = model;
+    if (model === 'Nnaobanana2') {
+        effectiveModel = 'gemini-3.1-flash-image-preview';
+    } else if (model.includes('imagen')) {
+        effectiveModel = 'imagen-3.0-generate-002';
+    } else if (model === 'gemini-3-pro-image-preview') {
+        effectiveModel = 'gemini-3.1-flash-image-preview'; // Or specific pro image model
+    }
 
     // Prepare Contents
     const parts: Part[] = [];
@@ -452,9 +470,19 @@ export const generateVideo = async (
 
     // --- Model Normalization for Yunwu AI ---
     let effectiveModel = model;
-    if (model === 'veo_3_1-fast') effectiveModel = 'veo-3.1-fast-generate-preview';
-    if (model === 'sora-2') effectiveModel = 'sora-2'; // Placeholder for Sora
-    if (model === 'kling-3.0') effectiveModel = 'kling-v1-5'; // Mapping to available Kling version
+    if (model === 'veo_3_1-fast' || model === 'veo-3.1-fast-generate-preview') {
+        effectiveModel = 'veo-3.1-fast-generate-preview';
+    } else if (model === 'veo-3.1-generate-preview') {
+        effectiveModel = 'veo-3.1-generate-preview';
+    } else if (model === 'sora-2') {
+        effectiveModel = 'sora-2'; 
+    } else if (model === 'kling-3.0') {
+        effectiveModel = 'kling-v1-5';
+    }
+    
+    // Ensure we are using the correct provider if user has set yunwu_api_key
+    const activeProvider = localStorage.getItem('api_provider') || 'yunwu';
+    // Yunwu often expects specific model names or prepends
 
     // --- Quality Optimization ---
     const qualitySuffix = ", cinematic lighting, highly detailed, photorealistic, 4k, smooth motion, professional color grading";

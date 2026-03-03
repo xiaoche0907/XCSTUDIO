@@ -602,7 +602,11 @@ const NodeComponent: React.FC<NodeProps> = ({
         } else if (node.type === NodeType.AUDIO_GENERATOR) {
             models = [{ l: 'Voice Factory (Gemini 2.0)', v: 'gemini-2.5-flash-preview-tts' }];
         } else {
-            models = [{ l: 'Gemini 2.5', v: 'gemini-2.5-flash-image' }, { l: 'Gemini 3 Pro', v: 'gemini-3-pro-image-preview' }];
+            models = [
+                { l: 'Nnaobanana2 (3.1 Flash Image)', v: 'Nnaobanana2' },
+                { l: 'Gemini 2.5', v: 'gemini-2.5-flash-image' },
+                { l: 'Gemini 3 Pro', v: 'gemini-3-pro-image-preview' }
+            ];
         }
 
         return (

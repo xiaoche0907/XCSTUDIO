@@ -283,6 +283,31 @@ type ToolType =
 
 const PROXY_TRIGGER_PIXELS = 8_000_000;
 const DEFAULT_PROXY_MAX_DIM = 2560;
+const IMAGE_FIT_VIEWPORT_RATIO = 0.6;
+const IMAGE_FIT_MAX_WIDTH = 1280;
+const IMAGE_FIT_MAX_HEIGHT = 900;
+
+const calcInitialDisplaySize = (
+  imgW: number,
+  imgH: number,
+  viewportW: number,
+  viewportH: number,
+) => {
+  const safeW = Math.max(1, imgW);
+  const safeH = Math.max(1, imgH);
+  const maxW = Math.min(viewportW * IMAGE_FIT_VIEWPORT_RATIO, IMAGE_FIT_MAX_WIDTH);
+  const maxH = Math.min(viewportH * IMAGE_FIT_VIEWPORT_RATIO, IMAGE_FIT_MAX_HEIGHT);
+  const scale = Math.min(maxW / safeW, maxH / safeH, 1);
+  return {
+    displayW: Math.max(1, Math.round(safeW * scale)),
+    displayH: Math.max(1, Math.round(safeH * scale)),
+  };
+};
+
+const getCanvasViewportSize = (showAssistant: boolean) => ({
+  width: Math.max(320, window.innerWidth - (showAssistant ? 480 : 0)),
+  height: Math.max(240, window.innerHeight),
+});
 
 const fileToDataUrl = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -296,6 +321,10 @@ const fileToDataUrl = (file: File): Promise<string> => {
 const makeImageProxyDataUrl = async (
   file: File,
   maxDim: number = DEFAULT_PROXY_MAX_DIM,
+  fitViewport: { width: number; height: number } = {
+    width: window.innerWidth,
+    height: window.innerHeight,
+  },
 ): Promise<{
   originalUrl: string;
   displayUrl: string;
@@ -311,8 +340,14 @@ const makeImageProxyDataUrl = async (
   const pixelCount = originalWidth * originalHeight;
 
   let displayUrl = originalUrl;
-  let displayWidth = originalWidth;
-  let displayHeight = originalHeight;
+  const fitted = calcInitialDisplaySize(
+    originalWidth,
+    originalHeight,
+    fitViewport.width,
+    fitViewport.height,
+  );
+  let displayWidth = fitted.displayW;
+  let displayHeight = fitted.displayH;
 
   if (pixelCount > PROXY_TRIGGER_PIXELS) {
     const scale = Math.min(1, maxDim / Math.max(originalWidth, originalHeight));
@@ -341,8 +376,6 @@ const makeImageProxyDataUrl = async (
         ctx.drawImage(full, 0, 0, targetW, targetH);
       }
       displayUrl = canvas.toDataURL("image/webp", 0.85);
-      displayWidth = targetW;
-      displayHeight = targetH;
     }
 
     proxyBitmap?.close?.();
@@ -356,6 +389,106 @@ const makeImageProxyDataUrl = async (
     originalHeight,
     displayWidth,
     displayHeight,
+  };
+};
+
+const makeImageProxyFromUrl = async (
+  url: string,
+  maxDim: number = DEFAULT_PROXY_MAX_DIM,
+  fitViewport: { width: number; height: number } = {
+    width: window.innerWidth,
+    height: window.innerHeight,
+  },
+): Promise<{
+  originalUrl: string;
+  displayUrl: string;
+  originalWidth: number;
+  originalHeight: number;
+  displayWidth: number;
+  displayHeight: number;
+}> => {
+  const readNaturalSize = (src: string) =>
+    new Promise<{ width: number; height: number }>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () =>
+        resolve({
+          width: img.naturalWidth || img.width || 1,
+          height: img.naturalHeight || img.height || 1,
+        });
+      img.onerror = () => reject(new Error("Failed to load image"));
+      img.src = src;
+    });
+
+  let originalWidth = 1;
+  let originalHeight = 1;
+  let displayUrl = url;
+
+  try {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    const full = await createImageBitmap(blob);
+    originalWidth = full.width;
+    originalHeight = full.height;
+
+    const pixelCount = originalWidth * originalHeight;
+    if (pixelCount > PROXY_TRIGGER_PIXELS) {
+      const scale = Math.min(1, maxDim / Math.max(originalWidth, originalHeight));
+      const targetW = Math.max(1, Math.round(originalWidth * scale));
+      const targetH = Math.max(1, Math.round(originalHeight * scale));
+
+      let proxyBitmap: ImageBitmap | null = null;
+      try {
+        proxyBitmap = await createImageBitmap(blob, {
+          resizeWidth: targetW,
+          resizeHeight: targetH,
+          resizeQuality: "high",
+        });
+      } catch {
+        proxyBitmap = null;
+      }
+
+      const canvas = document.createElement("canvas");
+      canvas.width = targetW;
+      canvas.height = targetH;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        if (proxyBitmap) {
+          ctx.drawImage(proxyBitmap, 0, 0, targetW, targetH);
+        } else {
+          ctx.drawImage(full, 0, 0, targetW, targetH);
+        }
+        displayUrl = canvas.toDataURL("image/webp", 0.85);
+      }
+
+      proxyBitmap?.close?.();
+    }
+
+    full.close?.();
+  } catch {
+    try {
+      const size = await readNaturalSize(url);
+      originalWidth = size.width;
+      originalHeight = size.height;
+    } catch {
+      originalWidth = 1024;
+      originalHeight = 1024;
+    }
+  }
+
+  const fitted = calcInitialDisplaySize(
+    originalWidth,
+    originalHeight,
+    fitViewport.width,
+    fitViewport.height,
+  );
+
+  return {
+    originalUrl: url,
+    displayUrl,
+    originalWidth,
+    originalHeight,
+    displayWidth: fitted.displayW,
+    displayHeight: fitted.displayH,
   };
 };
 
@@ -1623,16 +1756,7 @@ const Workspace: React.FC = () => {
         },
       });
       if (result) {
-        const img = new Image();
-        img.src = result;
-        img.onload = () => {
-          setElements((prev) =>
-            prev.map((e) =>
-              e.id === newId ? { ...e, isGenerating: false, url: result } : e,
-            ),
-          );
-          saveToHistory(elements, markers);
-        };
+        await applyGeneratedImageToElement(newId, result, true);
       } else {
         setElements((prev) => prev.filter((e) => e.id !== newId));
       }
@@ -1697,13 +1821,11 @@ const Workspace: React.FC = () => {
         editInstruction: touchEditInstruction,
       });
       if (result.editedImage) {
-        const updated = elements.map((e) =>
-          e.id === touchEditPopup.elementId
-            ? { ...e, isGenerating: false, url: result.editedImage! }
-            : e,
+        await applyGeneratedImageToElement(
+          touchEditPopup.elementId,
+          result.editedImage,
+          true,
         );
-        setElements(updated);
-        saveToHistory(updated, markers);
       } else {
         setElements((prev) =>
           prev.map((e) =>
@@ -1856,11 +1978,7 @@ const Workspace: React.FC = () => {
       });
 
       if (resultUrl) {
-        setElements((prev) =>
-          prev.map((el) =>
-            el.id === id ? { ...el, isGenerating: false, url: resultUrl } : el,
-          ),
-        );
+        await applyGeneratedImageToElement(id, resultUrl, false);
       } else {
         setElements((prev) =>
           prev.map((el) =>
@@ -2772,6 +2890,39 @@ const Workspace: React.FC = () => {
     }
   };
 
+  const applyGeneratedImageToElement = async (
+    elementId: string,
+    resultUrl: string,
+    keepCurrentSize: boolean = true,
+  ) => {
+    const viewport = getCanvasViewportSize(showAssistant);
+    const {
+      originalUrl,
+      displayUrl,
+      originalWidth,
+      originalHeight,
+      displayWidth,
+      displayHeight,
+    } = await makeImageProxyFromUrl(resultUrl, DEFAULT_PROXY_MAX_DIM, viewport);
+
+    const updated = elements.map((e) => {
+      if (e.id !== elementId) return e;
+      return {
+        ...e,
+        isGenerating: false,
+        url: displayUrl,
+        originalUrl,
+        proxyUrl: displayUrl !== originalUrl ? displayUrl : undefined,
+        width: keepCurrentSize ? e.width : displayWidth,
+        height: keepCurrentSize ? e.height : displayHeight,
+        genAspectRatio: `${originalWidth}:${originalHeight}`,
+      };
+    });
+
+    setElements(updated);
+    saveToHistory(updated, markers);
+  };
+
   // --- Image Processing Handlers ---
 
   const handleUpscale = async () => {
@@ -2793,17 +2944,7 @@ const Workspace: React.FC = () => {
       });
 
       if (resultUrl) {
-        const img = new Image();
-        img.src = resultUrl;
-        img.onload = () => {
-          const update2 = elements.map((e) =>
-            e.id === selectedElementId
-              ? { ...e, isGenerating: false, url: resultUrl }
-              : e,
-          );
-          setElements(update2);
-          saveToHistory(update2, markers);
-        };
+        await applyGeneratedImageToElement(selectedElementId, resultUrl, true);
       } else {
         throw new Error("No result");
       }
@@ -2834,17 +2975,7 @@ const Workspace: React.FC = () => {
       });
 
       if (resultUrl) {
-        const img = new Image();
-        img.src = resultUrl;
-        img.onload = () => {
-          const update2 = elements.map((e) =>
-            e.id === selectedElementId
-              ? { ...e, isGenerating: false, url: resultUrl }
-              : e,
-          );
-          setElements(update2);
-          saveToHistory(update2, markers);
-        };
+        await applyGeneratedImageToElement(selectedElementId, resultUrl, true);
       } else {
         throw new Error("No result");
       }
@@ -2921,17 +3052,7 @@ const Workspace: React.FC = () => {
       });
 
       if (resultUrl) {
-        const img = new Image();
-        img.src = resultUrl;
-        img.onload = () => {
-          const update2 = elements.map((e) =>
-            e.id === selectedElementId
-              ? { ...e, isGenerating: false, url: resultUrl }
-              : e,
-          );
-          setElements(update2);
-          saveToHistory(update2, markers);
-        };
+        await applyGeneratedImageToElement(selectedElementId, resultUrl, true);
       } else {
         throw new Error("No result");
       }
@@ -2961,19 +3082,9 @@ const Workspace: React.FC = () => {
         referenceImage: base64Ref,
       });
       if (resultUrl) {
-        const img = new Image();
-        img.src = resultUrl;
-        img.onload = () => {
-          const update2 = elements.map((e) =>
-            e.id === selectedElementId
-              ? { ...e, isGenerating: false, url: resultUrl }
-              : e,
-          );
-          setElements(update2);
-          saveToHistory(update2, markers);
-          setShowFastEdit(false);
-          setFastEditPrompt("");
-        };
+        await applyGeneratedImageToElement(selectedElementId, resultUrl, true);
+        setShowFastEdit(false);
+        setFastEditPrompt("");
       } else {
         throw new Error("No result");
       }
@@ -3694,17 +3805,7 @@ const Workspace: React.FC = () => {
           el.genRefImages || (el.genRefImage ? [el.genRefImage] : []),
       });
       if (resultUrl) {
-        const img = new Image();
-        img.src = resultUrl;
-        img.onload = async () => {
-          const update2 = elements.map((e) =>
-            e.id === elementId
-              ? { ...e, isGenerating: false, url: resultUrl }
-              : e,
-          );
-          setElements(update2);
-          saveToHistory(update2, markers);
-        };
+        await applyGeneratedImageToElement(elementId, resultUrl, true);
       } else {
         const updateFail = elements.map((e) =>
           e.id === elementId ? { ...e, isGenerating: false } : e,
@@ -3719,6 +3820,74 @@ const Workspace: React.FC = () => {
       setElements(updateFail);
     }
   };
+
+  useEffect(() => {
+    const pending = elements.filter(
+      (el) => el.type === "gen-image" && !!el.url && !el.originalUrl,
+    );
+    if (pending.length === 0) return;
+
+    let cancelled = false;
+
+    void (async () => {
+      const viewport = getCanvasViewportSize(showAssistant);
+      const updates = await Promise.all(
+        pending.map(async (el) => {
+          try {
+            const proxy = await makeImageProxyFromUrl(
+              el.url!,
+              DEFAULT_PROXY_MAX_DIM,
+              viewport,
+            );
+            return {
+              id: el.id,
+              url: proxy.displayUrl,
+              originalUrl: proxy.originalUrl,
+              proxyUrl:
+                proxy.displayUrl !== proxy.originalUrl
+                  ? proxy.displayUrl
+                  : undefined,
+              width: proxy.displayWidth,
+              height: proxy.displayHeight,
+              genAspectRatio: `${proxy.originalWidth}:${proxy.originalHeight}`,
+            };
+          } catch {
+            return null;
+          }
+        }),
+      );
+
+      const patch = new Map(
+        updates
+          .filter((u): u is NonNullable<typeof u> => Boolean(u))
+          .map((u) => [u.id, u]),
+      );
+      if (patch.size === 0 || cancelled) return;
+
+      setElements((prev) => {
+        let changed = false;
+        const next = prev.map((el) => {
+          const hit = patch.get(el.id);
+          if (!hit) return el;
+          changed = true;
+          return {
+            ...el,
+            url: hit.url,
+            originalUrl: hit.originalUrl,
+            proxyUrl: hit.proxyUrl,
+            width: hit.width,
+            height: hit.height,
+            genAspectRatio: hit.genAspectRatio,
+          };
+        });
+        return changed ? next : prev;
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [elements, showAssistant]);
 
   const handleGenVideo = async (elementId: string) => {
     const el = elements.find((e) => e.id === elementId);
@@ -3830,6 +3999,7 @@ const Workspace: React.FC = () => {
       if (type === "image") {
         void (async () => {
           try {
+            const viewport = getCanvasViewportSize(showAssistant);
             const {
               originalUrl,
               displayUrl,
@@ -3837,9 +4007,9 @@ const Workspace: React.FC = () => {
               originalHeight,
               displayWidth,
               displayHeight,
-            } = await makeImageProxyDataUrl(file);
-            const containerW = window.innerWidth - (showAssistant ? 480 : 0);
-            const containerH = window.innerHeight;
+            } = await makeImageProxyDataUrl(file, DEFAULT_PROXY_MAX_DIM, viewport);
+            const containerW = viewport.width;
+            const containerH = viewport.height;
             const centerX = (containerW / 2 - pan.x) / (zoom / 100);
             const centerY = (containerH / 2 - pan.y) / (zoom / 100);
             const offset = index * 20;
@@ -3866,20 +4036,29 @@ const Workspace: React.FC = () => {
             const fallbackUrl = await fileToDataUrl(file);
             const img = new Image();
             img.onload = () => {
-              const containerW = window.innerWidth - (showAssistant ? 480 : 0);
-              const containerH = window.innerHeight;
+              const viewport = getCanvasViewportSize(showAssistant);
+              const containerW = viewport.width;
+              const containerH = viewport.height;
               const centerX = (containerW / 2 - pan.x) / (zoom / 100);
               const centerY = (containerH / 2 - pan.y) / (zoom / 100);
+              const fitted = calcInitialDisplaySize(
+                img.width,
+                img.height,
+                viewport.width,
+                viewport.height,
+              );
               const offset = index * 20;
               newElementsToAppend.push({
                 id: Date.now().toString() + index,
                 type: "image",
                 url: fallbackUrl,
-                x: centerX - img.width / 2 + offset,
-                y: centerY - img.height / 2 + offset,
-                width: img.width,
-                height: img.height,
+                originalUrl: fallbackUrl,
+                x: centerX - fitted.displayW / 2 + offset,
+                y: centerY - fitted.displayH / 2 + offset,
+                width: fitted.displayW,
+                height: fitted.displayH,
                 zIndex: elements.length + index + 1,
+                genAspectRatio: `${Math.max(1, img.width)}:${Math.max(1, img.height)}`,
               });
               checkDone();
             };
@@ -3950,6 +4129,7 @@ const Workspace: React.FC = () => {
       if (file.type.startsWith("image/")) {
         void (async () => {
           try {
+            const viewport = getCanvasViewportSize(showAssistant);
             const {
               originalUrl,
               displayUrl,
@@ -3957,7 +4137,7 @@ const Workspace: React.FC = () => {
               originalHeight,
               displayWidth,
               displayHeight,
-            } = await makeImageProxyDataUrl(file);
+            } = await makeImageProxyDataUrl(file, DEFAULT_PROXY_MAX_DIM, viewport);
             const offset = index * 20;
             newElementsToAppend.push({
               id: Date.now().toString() + index,
@@ -3980,16 +4160,25 @@ const Workspace: React.FC = () => {
             const fallbackUrl = await fileToDataUrl(file);
             const img = new Image();
             img.onload = () => {
+              const viewport = getCanvasViewportSize(showAssistant);
+              const fitted = calcInitialDisplaySize(
+                img.width,
+                img.height,
+                viewport.width,
+                viewport.height,
+              );
               const offset = index * 20;
               newElementsToAppend.push({
                 id: Date.now().toString() + index,
                 type: "image",
                 url: fallbackUrl,
-                x: canvasDropX - img.width / 2 + offset,
-                y: canvasDropY - img.height / 2 + offset,
-                width: img.width,
-                height: img.height,
+                originalUrl: fallbackUrl,
+                x: canvasDropX - fitted.displayW / 2 + offset,
+                y: canvasDropY - fitted.displayH / 2 + offset,
+                width: fitted.displayW,
+                height: fitted.displayH,
                 zIndex: elements.length + index + 1,
+                genAspectRatio: `${Math.max(1, img.width)}:${Math.max(1, img.height)}`,
               });
               checkDone();
             };
