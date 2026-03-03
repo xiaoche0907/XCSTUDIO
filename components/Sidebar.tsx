@@ -47,7 +47,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onNewProject }) => {
 
         <div className="w-12 py-6 bg-card/80 backdrop-blur-xl rounded-full shadow-premium flex flex-col items-center gap-6 border border-border/50">
           <button
-            onClick={() => navigate("/")}
+            onClick={() => navigate("/dashboard")}
             className={`p-2 rounded-full transition ${isActive("/")
               ? "bg-gray-100 text-black shadow-sm"
               : "text-gray-400 hover:text-black hover:bg-gray-50"
@@ -92,7 +92,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onNewProject }) => {
       {/* 移动端底部导航 */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 h-16 bg-white/80 backdrop-blur-xl border-t border-gray-100 flex items-center justify-around px-4 z-50 pb-safe">
         <button
-          onClick={() => navigate("/")}
+          onClick={() => navigate("/dashboard")}
           className={`flex flex-col items-center gap-1 ${isActive("/") ? "text-black" : "text-gray-400"}`}
         >
           <HomeIcon size={20} strokeWidth={isActive("/") ? 2.5 : 2} />

@@ -1009,7 +1009,17 @@ export const App = () => {
             <div
                 className={`w-full h-full overflow-hidden text-slate-200 selection:bg-cyan-500/30 ${isDraggingCanvas ? 'cursor-grabbing' : 'cursor-default'}`}
                 onMouseDown={handleCanvasMouseDown} onWheel={handleWheel}
-                onDoubleClick={(e) => { e.preventDefault(); if (e.target !== e.currentTarget) return; if (e.detail > 1 && !selectionRect) { setContextMenu({ visible: true, x: e.clientX, y: e.clientY, id: '' }); setContextMenuTarget({ type: 'create' }); } }}
+                onDoubleClick={(e) => { 
+                    e.preventDefault(); 
+                    const target = e.target as HTMLElement;
+                    // 如果点中节点、按钮或输入框，则不触发背景双击
+                    if (target.closest('.node-ui') || target.closest('button') || target.closest('input')) return;
+                    
+                    if (e.detail > 1 && !selectionRect) { 
+                        setContextMenu({ visible: true, x: e.clientX, y: e.clientY, id: '' }); 
+                        setContextMenuTarget({ type: 'create' }); 
+                    } 
+                }}
                 onContextMenu={(e) => { e.preventDefault(); if (e.target === e.currentTarget) setContextMenu(null); }}
                 onDragOver={handleCanvasDragOver} onDrop={handleCanvasDrop}
             >

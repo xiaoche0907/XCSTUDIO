@@ -68,19 +68,9 @@ export async function generateImageWithProvider(
   model: string
 ): Promise<string | null> {
   const resolvedModel = resolveImageModel(model);
-  const providerId = modelToImageProvider[resolvedModel];
-  if (!providerId) {
-    throw new ProviderError({
-      provider: 'router',
-      code: 'MODEL_NOT_FOUND',
-      retryable: false,
-      stage: 'modelResolve',
-      details: `image:${model}`,
-      message: `未知图像模型: ${model}`,
-    });
-  }
-
+  const providerId = modelToImageProvider[resolvedModel] || 'gemini'; // 默认回落到 Gemini / 云雾中转大管家
   const provider = imageProviders.get(providerId);
+
   if (!provider) {
     throw new ProviderError({
       provider: providerId,
@@ -100,17 +90,10 @@ export async function generateVideoWithProvider(
   model: string
 ): Promise<string | null> {
   const resolvedModel = resolveVideoModel(model);
-  const providerId = modelToVideoProvider[resolvedModel];
-  if (!providerId) {
-    throw new ProviderError({
-      provider: 'router',
-      code: 'MODEL_NOT_FOUND',
-      retryable: false,
-      stage: 'modelResolve',
-      details: `video:${model}`,
-      message: `未知视频模型: ${model}`,
-    });
-  }
+  
+  // 对 Kling 的显式识别，如果是 kling 开头的模型或者指定的关键字
+  const isKling = resolvedModel.toLowerCase().includes('kling');
+  const providerId = modelToVideoProvider[resolvedModel] || (isKling ? 'kling' : 'gemini');
 
   const provider = videoProviders.get(providerId);
   if (!provider) {

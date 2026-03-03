@@ -51,7 +51,10 @@
     "oneclick",
     "Oneclick",
     "SKYSPER",
-    "pendings"
+    "pendings",
+    "conv",
+    "AABB",
+    "nums"
   ],
   "ignorePaths": ["node_modules", "dist", "public"]
 }

@@ -74,22 +74,22 @@ const ModelCard = React.memo(({
 }) => (
     <div
         onClick={onToggle}
-        className={`p-5 rounded-3xl border transition-all cursor-pointer flex items-center justify-between group ${isSelected
-            ? 'bg-blue-50/50 border-blue-600 shadow-sm' : 'bg-white border-gray-100 hover:border-blue-300'
+        className={`p-4 rounded-xl border transition-all cursor-pointer flex items-center justify-between group ${isSelected
+            ? 'bg-gray-50/50 border-black shadow-sm' : 'bg-white border-gray-100 hover:border-gray-300'
             }`}
     >
-        <div className="flex items-center gap-5">
-            <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${isSelected
-                ? 'bg-blue-600 border-blue-600' : 'border-gray-200'
+        <div className="flex items-center gap-4">
+            <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${isSelected
+                ? 'bg-black border-black' : 'border-gray-200'
                 }`}>
-                {isSelected && <Check size={14} className="text-white" strokeWidth={4} />}
+                {isSelected && <Check size={12} className="text-white" strokeWidth={4} />}
             </div>
             <div>
-                <div className="text-sm font-black text-gray-800 tracking-tight truncate max-w-[180px]">{model.id}</div>
+                <div className="text-sm font-bold text-gray-800 tracking-tight truncate max-w-[180px]">{model.id}</div>
                 <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">{model.brand || 'Other'} Node</div>
             </div>
         </div>
-        <div className="text-[10px] font-black px-3 py-1 bg-gray-50 text-gray-400 rounded-full group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
+        <div className="text-[10px] font-bold px-2.5 py-1 bg-gray-50 text-gray-400 rounded-md group-hover:bg-gray-100 group-hover:text-black transition-colors">
             {providerName}
         </div>
     </div>
@@ -236,7 +236,6 @@ const SettingsPage: React.FC = () => {
 
     const tabs: { id: SettingsTab; label: string; icon: any }[] = [
         { id: 'api', label: '服务商配置', icon: Key },
-        { id: 'mapping', label: '模型映射', icon: Globe },
         { id: 'hosting', label: '图床配置', icon: ImageIcon },
         { id: 'advanced', label: '交互设置', icon: Sliders },
         { id: 'storage', label: '缓存磁盘', icon: HardDrive },
@@ -258,49 +257,49 @@ const SettingsPage: React.FC = () => {
     };
 
     return (
-        <div className="flex min-h-screen bg-background selection:bg-primary/10 transition-colors duration-500">
+        <div className="flex min-h-screen bg-[#f8f9fa] selection:bg-black/5 transition-colors duration-500">
             <Sidebar />
             
-            <div className="flex-1 flex flex-col lg:ml-24 lg:mr-8 lg:my-8 m-0 bg-card lg:rounded-lg shadow-premium border border-border/40 overflow-hidden pb-16 lg:pb-0">
-                <header className="px-6 lg:px-10 py-6 lg:py-8 border-b border-border/40 flex items-center justify-between sticky top-0 z-20 bg-card/80 backdrop-blur-xl">
-                    <div className="flex items-center gap-4 lg:gap-6">
+            <div className="flex-1 flex flex-col pb-16 lg:pb-0">
+                <header className="px-6 lg:px-12 py-8 lg:mt-4 flex items-center justify-between sticky top-0 z-30 bg-[#f8f9fa]/80 backdrop-blur-xl">
+                    <div className="flex items-center gap-4 lg:gap-8 ml-2">
                         <button 
                             onClick={() => navigate(-1)}
-                            className="w-11 h-11 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground border border-transparent hover:border-border transition-all active:scale-90"
+                            className="w-10 h-10 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-100 hover:text-black border border-gray-200 transition-all active:scale-95"
                         >
-                            <ArrowLeft size={20} />
+                            <ArrowLeft size={18} />
                         </button>
                         <div className="flex flex-col">
-                            <h3 className="text-xl lg:text-2xl font-display font-bold text-foreground tracking-tight flex items-center gap-3">
+                            <h3 className="text-2xl lg:text-3xl font-display font-bold text-foreground tracking-tight flex items-center gap-4">
                                 设置中心
                                 {activeTab && (
-                                    <span className="hidden sm:inline-block text-[10px] bg-primary/10 text-primary px-3 py-0.5 rounded-full font-bold uppercase tracking-wider border border-primary/20">
+                                    <span className="hidden sm:inline-block text-[11px] lg:text-xs bg-primary/10 text-primary px-3 py-1 rounded-full font-bold uppercase tracking-wider border border-primary/20">
                                         {tabs.find(t => t.id === activeTab)?.label}
                                     </span>
                                 )}
                             </h3>
-                            <p className="hidden lg:block text-[10px] text-muted-foreground/60 uppercase tracking-[0.2em] mt-1 font-semibold">XC-STUDIO Infrastructure</p>
+                            <p className="hidden lg:block text-[11px] lg:text-xs text-muted-foreground/60 uppercase tracking-[0.2em] mt-1.5 font-semibold">XC-STUDIO Infrastructure</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-4">
                         <button
                             onClick={handleSave}
                             disabled={isSaving}
-                            className={`px-5 lg:px-10 py-2 lg:py-3 rounded-md text-xs lg:text-sm font-display font-bold text-white shadow-premium transition-all duration-300 active:scale-95 flex items-center gap-2 lg:gap-3 ${saveStatus === 'success'
-                                ? 'bg-green-500/90 hover:bg-green-500'
-                                : 'bg-primary hover:bg-primary/90'
+                            className={`px-7 lg:px-10 py-2.5 lg:py-3 rounded-full text-sm lg:text-[15px] font-bold text-white shadow-xl shadow-black/10 transition-all duration-300 active:scale-95 hover:-translate-y-0.5 flex items-center gap-2 lg:gap-3 ${saveStatus === 'success'
+                                ? 'bg-green-500 hover:bg-green-600'
+                                : 'bg-black hover:bg-gray-800'
                                 }`}
                         >
-                            {isSaving ? <Loader2 size={16} className="animate-spin" /> : saveStatus === 'success' ? <Check size={16} /> : <div className="p-0.5 bg-white/20 rounded"><RefreshCw size={14} /></div>}
+                            {isSaving ? <Loader2 size={18} className="animate-spin" /> : saveStatus === 'success' ? <Check size={18} /> : <div className="p-0.5 bg-white/20 rounded-md"><RefreshCw size={16} /></div>}
                             <span className="hidden xs:inline">{saveStatus === 'success' ? '配置已入库' : '保存系统设置'}</span>
                             <span className="xs:hidden">{saveStatus === 'success' ? 'OK' : '保存'}</span>
                         </button>
                     </div>
                 </header>
 
-                <div className="flex flex-1 flex-col lg:flex-row overflow-hidden">
+                <div className="flex flex-1 flex-col lg:flex-row max-w-[1800px] w-full mx-auto px-6 lg:px-10">
                     {/* Inner Sidebar */}
-                    <div className="lg:w-72 w-full bg-muted/30 border-r border-border/40 p-4 lg:p-8 flex lg:flex-col overflow-x-auto lg:overflow-y-auto gap-1.5 no-scrollbar">
+                    <div className="lg:w-56 w-full py-10 flex lg:flex-col overflow-x-auto lg:overflow-y-auto gap-0.5 no-scrollbar lg:border-r lg:border-gray-200/50 pr-8">
                         {tabs.map(tab => {
                             const Icon = tab.icon;
                             const active = activeTab === tab.id;
@@ -308,19 +307,21 @@ const SettingsPage: React.FC = () => {
                                 <button
                                     key={tab.id}
                                     onClick={() => setActiveTab(tab.id)}
-                                    className={`flex items-center gap-4 px-5 py-3.5 rounded-md transition-all duration-300 group shrink-0 lg:shrink ${active
-                                        ? 'bg-card text-foreground shadow-premium border border-border/50 translate-x-1 lg:translate-x-2'
-                                        : 'text-muted-foreground hover:bg-card/50 hover:text-foreground'
+                                    className={`flex items-center gap-4 px-6 py-3.5 rounded-xl transition-all duration-300 group shrink-0 lg:shrink ${active
+                                        ? 'bg-gray-100/80 text-black shadow-sm'
+                                        : 'text-gray-450 hover:bg-gray-50 hover:text-gray-900'
                                         }`}
                                 >
-                                    <div className={`p-2 rounded-md transition-colors ${active ? 'bg-primary/10 text-primary' : 'bg-muted/50 text-muted-foreground group-hover:bg-muted group-hover:text-foreground'}`}>
-                                        <Icon size={18} />
+                                    <div className={`p-2 rounded-lg transition-colors ${active ? 'bg-black/5 text-black' : 'text-gray-400 group-hover:text-gray-700'}`}>
+                                        <Icon size={20} />
                                     </div>
-                                    <span className={`text-sm tracking-tight font-display ${active ? 'font-bold' : 'font-medium'}`}>{tab.label}</span>
+                                    <span className={`text-[15px] tracking-tight ${active ? 'font-bold' : 'font-medium'}`}>{tab.label}</span>
                                     {active && (
                                         <motion.div 
                                             layoutId="activeTabDot"
-                                            className="ml-auto w-1.5 h-1.5 rounded-full bg-primary"
+                                            className="ml-auto w-1.5 h-4 rounded-full bg-black"
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
                                         />
                                     )}
                                 </button>
@@ -329,13 +330,13 @@ const SettingsPage: React.FC = () => {
                     </div>
 
                     {/* Main Content */}
-                    <main className="flex-1 overflow-y-auto p-6 lg:p-10 space-y-8 no-scrollbar pb-24 lg:pb-10">
+                    <main className="flex-1 p-6 lg:p-14 space-y-12 no-scrollbar pb-24 lg:pb-10">
                         {activeTab === 'api' && (
                             <div className="space-y-6">
                                 <div className="flex items-center justify-between">
                                     <div>
-                                        <h4 className="text-sm font-black text-gray-900">API 供应商</h4>
-                                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">Infrastructure Management</p>
+                                        <h4 className="text-xl font-display font-bold text-gray-900">API 供应商</h4>
+                                        <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">Infrastructure Management</p>
                                     </div>
                                     <button
                                         onClick={() => {
@@ -348,9 +349,9 @@ const SettingsPage: React.FC = () => {
                                             };
                                             setEditingProvider(newP);
                                         }}
-                                        className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-xs font-black text-blue-600 hover:border-blue-400 transition-all shadow-sm"
+                                        className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-200 rounded-xl text-[14px] font-bold text-gray-700 hover:border-gray-400 transition-all shadow-sm active:scale-95"
                                     >
-                                        <Plus size={14} />
+                                        <Plus size={16} />
                                         添加节点
                                     </button>
                                 </div>
@@ -359,28 +360,28 @@ const SettingsPage: React.FC = () => {
                                     {providers.map(p => (
                                         <div
                                             key={p.id}
-                                            className={`bg-white border rounded-3xl p-6 transition-all flex items-center justify-between ${activeProviderId === p.id ? 'border-black ring-4 ring-black/5 shadow-lg' : 'border-gray-100 hover:border-gray-200'}`}
+                                            className={`bg-white border rounded-2xl p-5 transition-all flex items-center justify-between ${activeProviderId === p.id ? 'border-gray-200 ring-4 ring-gray-100 shadow-premium' : 'border-gray-100 hover:border-gray-200'}`}
                                         >
                                             <div className="flex items-center gap-5">
-                                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-colors ${activeProviderId === p.id ? 'bg-black text-white' : 'bg-gray-50 text-gray-400'}`}>
-                                                    {p.id === 'gemini' ? <Zap size={20} /> : <Globe size={20} />}
+                                                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-colors ${activeProviderId === p.id ? 'bg-black text-white' : 'bg-gray-50 text-gray-400'}`}>
+                                                    {p.id === 'gemini' ? <Zap size={24} /> : <Globe size={24} />}
                                                 </div>
                                                 <div>
-                                                    <h5 className="font-black text-gray-900 leading-none mb-1">{p.name}</h5>
-                                                    <div className="text-[10px] text-gray-400 font-bold truncate max-w-[200px]">{p.baseUrl || 'Default Endpoint'}</div>
+                                                    <h5 className="text-lg font-bold text-gray-900 leading-tight mb-1">{p.name}</h5>
+                                                    <div className="text-xs text-gray-400 font-medium truncate max-w-[240px]">{p.baseUrl || 'Default Endpoint'}</div>
                                                 </div>
                                             </div>
 
                                             <div className="flex items-center gap-3">
                                                 <button
                                                     onClick={() => setEditingProvider({ ...p })}
-                                                    className="w-10 h-10 rounded-xl flex items-center justify-center hover:bg-gray-50 text-gray-400 hover:text-black transition-all"
+                                                    className="w-11 h-11 rounded-xl flex items-center justify-center hover:bg-gray-50 text-gray-400 hover:text-black transition-all"
                                                 >
-                                                    <Sliders size={16} />
+                                                    <Sliders size={18} />
                                                 </button>
                                                 <button
                                                     onClick={() => setActiveProviderId(p.id)}
-                                                    className={`px-4 py-2 rounded-xl text-[10px] font-black transition-all ${activeProviderId === p.id ? 'bg-black text-white' : 'bg-gray-50 text-gray-400 hover:text-black'}`}
+                                                    className={`px-5 py-2.5 rounded-lg text-xs font-bold transition-all ${activeProviderId === p.id ? 'bg-black text-white' : 'bg-gray-50 text-gray-500 hover:text-black hover:bg-gray-100'}`}
                                                 >
                                                     {activeProviderId === p.id ? '当前使用' : '切换节点'}
                                                 </button>
@@ -393,27 +394,27 @@ const SettingsPage: React.FC = () => {
                                     <SettingsCard title="交互增强" icon={<Zap size={18} />} description="全局生成设置">
                                         <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl mt-4">
                                             <div>
-                                                <div className="text-xs font-black text-gray-800">并行任务数</div>
-                                                <div className="text-[10px] text-gray-400 font-bold">建议设置 1-3</div>
+                                                <div className="text-sm font-bold text-gray-800">并行任务数</div>
+                                                <div className="text-xs text-gray-500 font-medium">建议设置 1-3</div>
                                             </div>
                                             <input
                                                 type="number"
                                                 value={concurrentCount}
                                                 onChange={e => setConcurrentCount(Math.max(1, parseInt(e.target.value) || 1))}
-                                                className="w-16 h-10 bg-white border border-gray-200 rounded-xl px-3 text-xs font-bold text-center outline-none"
+                                                className="w-20 h-11 bg-white border border-gray-200 rounded-xl px-4 text-sm font-bold text-center outline-none focus:ring-4 focus:ring-black/5"
                                             />
                                         </div>
                                     </SettingsCard>
                                     
                                     <div className="space-y-4">
                                         <SettingsCard title="三方集成" icon={<Plus size={18} />}>
-                                            <div className="space-y-3 mt-4">
+                                            <div className="space-y-4 mt-4">
                                                 <div className="flex flex-col gap-1.5">
-                                                    <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Replicate Key</label>
+                                                    <label className="text-[11px] font-bold text-gray-500 uppercase ml-1">Replicate Key</label>
                                                     <SettingsInput type="password" value={replicateKey} onChange={e => setReplicateKey(e.target.value)} placeholder="r8_..." />
                                                 </div>
                                                 <div className="flex flex-col gap-1.5">
-                                                    <label className="text-[10px] font-black text-gray-400 uppercase ml-1">Kling Key</label>
+                                                    <label className="text-[11px] font-bold text-gray-500 uppercase ml-1">Kling Key</label>
                                                     <SettingsInput type="password" value={klingKey} onChange={e => setKlingKey(e.target.value)} placeholder="kling-..." />
                                                 </div>
                                             </div>
@@ -445,8 +446,8 @@ const SettingsPage: React.FC = () => {
                                                             {providerId === 'none' ? <X size={16} /> : providerId === 'imgbb' ? <ImageIcon size={16} /> : <Globe size={16} />} {/* cspell:disable-line */}
                                                         </div>
                                                         <div className="text-left">
-                                                            <div className="text-sm font-bold">{providerId === 'none' ? '不启用' : providerId === 'imgbb' ? 'ImgBB' : '自定义 API'}</div> {/* cspell:disable-line */}
-                                                            <div className="text-[10px] text-muted-foreground uppercase tracking-widest px-0.5">{providerId === 'none' ? '仅使用临时链接' : providerId === 'imgbb' ? '官方 API' : '兼容协议'}</div> {/* cspell:disable-line */}
+                                                            <div className="text-[15px] font-bold">{providerId === 'none' ? '不启用' : providerId === 'imgbb' ? 'ImgBB' : '自定义 API'}</div> {/* cspell:disable-line */}
+                                                            <div className="text-[11px] text-muted-foreground uppercase tracking-widest px-0.5">{providerId === 'none' ? '仅使用临时链接' : providerId === 'imgbb' ? '官方 API' : '兼容协议'}</div> {/* cspell:disable-line */}
                                                         </div>
                                                     </div>
                                                     {imageHost.selectedProvider === providerId && <Check size={16} className="text-primary" />}
@@ -459,7 +460,7 @@ const SettingsPage: React.FC = () => {
                                         <SettingsCard title="ImgBB 参数" icon={<Key size={18} />}> {/* cspell:disable-line */}
                                             <div className="space-y-4 mt-4">
                                                 <div className="space-y-2">
-                                                    <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">API KEY (每行一个，轮询)</label>
+                                                    <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest ml-1">API KEY (每行一个，轮询)</label>
                                                     <div className="relative">
                                                         <textarea
                                                             value={imageHost.imgbbKey} // cspell:disable-line
@@ -479,7 +480,7 @@ const SettingsPage: React.FC = () => {
                                                         </button>
                                                     </div>
                                                 </div>
-                                                <p className="text-[10px] text-muted-foreground leading-relaxed px-1">
+                                                <p className="text-[11px] text-muted-foreground leading-relaxed px-1">
                                                     从 <a href="https://api.imgbb.com/" target="_blank" rel="noopener noreferrer" className="text-primary underline">ImgBB API</a> 获取密钥。免费版支持无限存储量。 {/* cspell:disable-line */}
                                                 </p>
                                             </div>
@@ -490,7 +491,7 @@ const SettingsPage: React.FC = () => {
                                         <SettingsCard title="自定义图床" icon={<Globe size={18} />}>
                                             <div className="space-y-4 mt-4">
                                                 <div className="space-y-2">
-                                                    <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">上传地址 (Upload URL)</label>
+                                                    <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest ml-1">上传地址 (Upload URL)</label>
                                                     <SettingsInput 
                                                         value={imageHost.customConfig.uploadUrl} 
                                                         onChange={(e) => imageHost.actions.setCustomConfig({ uploadUrl: e.target.value })} 
@@ -498,7 +499,7 @@ const SettingsPage: React.FC = () => {
                                                     />
                                                 </div>
                                                 <div className="space-y-2">
-                                                    <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">身份验证 (Auth Token，多行轮询)</label>
+                                                    <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest ml-1">身份验证 (Auth Token，多行轮询)</label>
                                                     <div className="relative">
                                                         <textarea
                                                             value={imageHost.customConfig.apiKey}
@@ -524,79 +525,6 @@ const SettingsPage: React.FC = () => {
                                 </div>
                             </div>
                         )}
-                        {activeTab === 'mapping' && (
-                            <div className="space-y-6">
-                                {(['script', 'image', 'video'] as const).map(cat => (
-                                    <div key={cat} className="bg-white border border-gray-100 rounded-[2rem] shadow-sm overflow-hidden">
-                                        <button
-                                            onClick={() => setExpandedCategory(expandedCategory === cat ? null : cat)}
-                                            className={`w-full px-8 py-6 flex items-center justify-between text-left transition-all ${expandedCategory === cat ? 'bg-gray-50/50' : 'hover:bg-gray-50/30'}`}
-                                        >
-                                            <div className="flex items-center gap-5">
-                                                <div className={`p-3 rounded-2xl ${cat === 'script' ? 'bg-purple-50 text-purple-600' : cat === 'image' ? 'bg-rose-50 text-rose-600' : 'bg-teal-50 text-teal-600'}`}>
-                                                    {cat === 'script' ? <Bot size={20} /> : cat === 'image' ? <ImageIcon size={20} /> : <Video size={20} />}
-                                                </div>
-                                                <div>
-                                                    <h4 className="text-sm font-black text-gray-900">{cat === 'script' ? '智能体思考' : cat === 'image' ? '视觉创作' : '动态视频'}</h4>
-                                                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider select-none">已选 {(cat === 'script' ? selectedScriptModels : cat === 'image' ? selectedImageModels : selectedVideoModels).length} 个适配模型</p>
-                                                </div>
-                                            </div>
-                                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${expandedCategory === cat ? 'bg-black text-white' : 'bg-gray-100 text-gray-400'}`}>
-                                                {expandedCategory === cat ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                                            </div>
-                                        </button>
-
-                                        <AnimatePresence>
-                                            {expandedCategory === cat && (
-                                                <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden">
-                                                    <div className="p-8 border-t border-gray-50 bg-[#fafafa]">
-                                                        {/* Filters and Selection logic - similar to Modal but layout optimized */}
-                                                        <div className="flex items-center gap-3 mb-6">
-                                                            <div className="relative flex-1">
-                                                                <Search size={14} className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400" />
-                                                                <input
-                                                                    value={searchQuery}
-                                                                    onChange={e => setSearchQuery(e.target.value)}
-                                                                    placeholder="搜索引擎..."
-                                                                    className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl text-xs outline-none focus:ring-4 focus:ring-black/5 focus:border-black transition-all"
-                                                                />
-                                                            </div>
-                                                            <div className="flex gap-2 overflow-x-auto no-scrollbar max-w-[400px]">
-                                                                {['all', 'OpenAI', 'Google', 'DeepSeek', 'Flux', 'Ideogram'].map(b => (
-                                                                    <button
-                                                                        key={b}
-                                                                        onClick={() => setBrandFilter(b)}
-                                                                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black transition-all whitespace-nowrap ${brandFilter === b ? 'bg-black text-white' : 'bg-white text-gray-400 hover:text-black'}`}
-                                                                    >
-                                                                        {b === 'all' ? '全部' : b}
-                                                                    </button>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="grid grid-cols-2 gap-4 max-h-[400px] overflow-y-auto pr-2 no-scrollbar">
-                                                            {(cat === 'image'
-                                                                ? [{ id: AUTO_IMAGE_OPTION_ID, name: AUTO_IMAGE_OPTION_ID, brand: 'Google', category: 'image', provider: activeProvider.name } as ModelInfo, ...filteredModels]
-                                                                : filteredModels
-                                                            ).slice(0, visibleCount).map(m => (
-                                                                <ModelCard
-                                                                    key={m.id}
-                                                                    model={m}
-                                                                    isSelected={(cat === 'script' ? selectedScriptModels : cat === 'image' ? selectedImageModels : selectedVideoModels).includes(m.id)}
-                                                                    onToggle={() => toggleModel(cat, m.id)}
-                                                                    providerName={activeProvider.name}
-                                                                />
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                </motion.div>
-                                            )}
-                                        </AnimatePresence>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-
                         {activeTab === 'advanced' && (
                             <div className="max-w-3xl space-y-6">
                                 <SettingsCard title="体验优化" icon={<Zap size={18} />}>
@@ -616,9 +544,9 @@ const SettingsPage: React.FC = () => {
                         )}
 
                         {activeTab === 'storage' && (
-                            <div className="flex flex-col items-center justify-center py-20 bg-gray-50/50 rounded-[3rem] border border-dashed border-gray-200">
+                            <div className="flex flex-col items-center justify-center py-20 bg-gray-50/50 rounded-2xl border border-dashed border-gray-200">
                                 <HardDrive size={48} className="text-gray-300 mb-6" />
-                                <h4 className="text-lg font-black text-gray-900 mb-2">架构节点加载中</h4>
+                                <h4 className="text-lg font-bold text-gray-900 mb-2">架构节点加载中</h4>
                                 <p className="text-xs text-gray-400 max-w-xs leading-relaxed">当前版本 XC-Studio 仅支持本地存储，云端同步模块正在进行内测（预计 V5.0 加入）。</p>
                             </div>
                         )}
@@ -627,7 +555,7 @@ const SettingsPage: React.FC = () => {
                             <div className="space-y-10 max-w-4xl mx-auto">
                                 <div className="bg-foreground p-12 lg:p-16 rounded-lg text-background relative overflow-hidden shadow-2xl">
                                     <div className="relative z-10">
-                                        <h4 className="text-5xl lg:text-7xl font-display font-black mb-4 tracking-tighter">XC-STUDIO</h4>
+                                        <h4 className="text-5xl lg:text-7xl font-display font-bold mb-4 tracking-tighter">XC-STUDIO</h4>
                                         <p className="text-primary text-xs lg:text-sm font-bold uppercase tracking-[0.4em] mb-12">System Architecture Engine V4.2.0</p>
                                         <div className="flex flex-wrap gap-4">
                                             <div className="px-5 py-2 bg-background/10 rounded-md text-[10px] font-bold backdrop-blur-md border border-background/20 uppercase tracking-widest">PRODUCTION STABLE</div>
@@ -662,10 +590,10 @@ const SettingsPage: React.FC = () => {
                 {editingProvider && (
                     <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/60 backdrop-blur-xl">
                         <motion.div
-                            initial={{ scale: 0.9, opacity: 0 }}
+                            initial={{ scale: 0.95, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0.9, opacity: 0 }}
-                            className="bg-white rounded-[2.5rem] p-10 w-full max-w-xl shadow-2xl relative border border-white"
+                            exit={{ scale: 0.95, opacity: 0 }}
+                            className="bg-white rounded-2xl p-8 w-full max-w-xl shadow-2xl relative border border-gray-100"
                         >
                             <button 
                                 onClick={() => setEditingProvider(null)}
@@ -674,7 +602,7 @@ const SettingsPage: React.FC = () => {
                                 <X size={20} />
                             </button>
 
-                            <h4 className="text-xl font-black text-gray-900 mb-8 flex items-center gap-3">
+                            <h4 className="text-xl font-bold text-gray-900 mb-8 flex items-center gap-3">
                                 <div className="w-10 h-10 bg-black text-white rounded-xl flex items-center justify-center">
                                     <Plus size={20} />
                                 </div>
@@ -683,7 +611,7 @@ const SettingsPage: React.FC = () => {
 
                             <div className="space-y-6">
                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">节点名称</label>
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">节点名称</label>
                                     <SettingsInput 
                                         value={editingProvider.name} 
                                         onChange={e => setEditingProvider({ ...editingProvider, name: e.target.value })} 
@@ -691,7 +619,7 @@ const SettingsPage: React.FC = () => {
                                     />
                                 </div>
                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">API 端点 (Base URL)</label>
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">API 端点 (Base URL)</label>
                                     <SettingsInput 
                                         value={editingProvider.baseUrl} 
                                         onChange={e => setEditingProvider({ ...editingProvider, baseUrl: e.target.value })} 
@@ -699,12 +627,12 @@ const SettingsPage: React.FC = () => {
                                     />
                                 </div>
                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">API 密钥 (支持多行轮询)</label>
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">API 密钥 (支持多行轮询)</label>
                                     <textarea
                                         value={editingProvider.apiKey}
                                         onChange={e => setEditingProvider({ ...editingProvider, apiKey: e.target.value })}
                                         placeholder="粘贴 API Key，每行一个"
-                                        className="w-full h-32 p-5 bg-gray-50 border border-gray-100 rounded-2xl text-xs font-mono outline-none focus:ring-4 focus:ring-blue-500/5 focus:border-blue-600 transition-all resize-none"
+                                        className="w-full h-32 p-5 bg-gray-50 border border-gray-100 rounded-2xl text-xs font-mono outline-none focus:ring-4 focus:ring-black/5 focus:border-black transition-all resize-none"
                                     />
                                 </div>
                             </div>
@@ -712,7 +640,7 @@ const SettingsPage: React.FC = () => {
                             <div className="mt-10 flex gap-4">
                                 <button
                                     onClick={() => setEditingProvider(null)}
-                                    className="flex-1 py-4 bg-gray-50 rounded-2xl text-xs font-black text-gray-400 hover:bg-gray-100 transition-all uppercase tracking-widest"
+                                    className="flex-1 py-3.5 bg-gray-50 rounded-xl text-xs font-bold text-gray-400 hover:bg-gray-100 hover:text-gray-900 transition-all uppercase tracking-widest"
                                 >
                                     放弃
                                 </button>
@@ -729,7 +657,7 @@ const SettingsPage: React.FC = () => {
                                         });
                                         setEditingProvider(null);
                                     }}
-                                    className="flex-1 py-4 bg-black rounded-2xl text-xs font-black text-white shadow-xl shadow-black/20 hover:-translate-y-1 transition-all uppercase tracking-widest"
+                                    className="flex-1 py-3.5 bg-black rounded-xl text-xs font-bold text-white shadow-lg hover:bg-gray-800 transition-all uppercase tracking-widest"
                                 >
                                     确认部署
                                 </button>

@@ -919,27 +919,71 @@ export const InputArea: React.FC<InputAreaProps> = ({
                                         {creationMode === 'video' ? <Activity size={18} strokeWidth={2} /> : <Banana size={18} strokeWidth={2} />}
                                     </button>
                                     {showModelPicker && (
-                                        <div className="absolute bottom-full right-0 mb-3 w-[240px] bg-white rounded-[24px] shadow-[0_20px_50px_-12px_rgba(0,0,0,0.15)] border border-gray-100 p-2 z-[100] animate-in fade-in slide-in-from-bottom-2 duration-300">
-                                            <div className="px-3 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">选择模型</div>
-                                            <div className="max-h-[300px] overflow-y-auto scroller-hidden">
-                                                {(creationMode === 'video' ? MODEL_OPTIONS.video : MODEL_OPTIONS.image).map(m => (
-                                                    <button
-                                                        key={m.id}
-                                                        onClick={() => {
-                                                            if (creationMode === 'video') setVideoGenModel(m.id as VideoModel);
-                                                            else setPreferredImageModel(m.id as ImageModel);
-                                                            setShowModelPicker(false);
-                                                            setAutoModelSelect(false);
-                                                        }}
-                                                        className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-[13px] font-bold transition-all ${(creationMode === 'video' ? videoGenModel === m.id : preferredImageModel === m.id) && !autoModelSelect ? 'bg-gray-100 text-black' : 'text-gray-600 hover:bg-gray-50'}`}
-                                                    >
-                                                        <div className="flex items-center gap-2.5">
-                                                            <m.icon size={16} strokeWidth={1.5} className="text-gray-400" />
-                                                            <span>{m.name}</span>
-                                                        </div>
-                                                        {(creationMode === 'video' ? videoGenModel === m.id : preferredImageModel === m.id) && !autoModelSelect && <Check size={14} className="text-blue-500" strokeWidth={3} />}
-                                                    </button>
-                                                ))}
+                                        <div className="absolute bottom-full right-0 mb-3 w-[260px] bg-white rounded-[24px] shadow-[0_20px_50px_-12px_rgba(0,0,0,0.15)] border border-gray-100 p-4 z-[100] animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                            <div className="px-1 mb-3 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                                                默认生成模型
+                                            </div>
+                                            <div className="flex flex-col gap-2.5">
+                                                <input
+                                                    autoFocus
+                                                    type="text"
+                                                    value={creationMode === 'video' ? videoGenModel : preferredImageModel}
+                                                    onChange={e => {
+                                                        const val = e.target.value;
+                                                        if (creationMode === 'video') setVideoGenModel(val as any);
+                                                        else setPreferredImageModel(val as any);
+                                                        setAutoModelSelect(false);
+                                                    }}
+                                                    placeholder="亦可直接输入自定义模型标识符"
+                                                    className="w-full px-4 py-2.5 bg-gray-50/50 border border-gray-200 hover:bg-white focus:bg-white rounded-xl text-[13px] font-bold text-gray-800 outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all placeholder:font-medium placeholder:text-gray-400"
+                                                />
+                                                
+                                                {/* Preset List */}
+                                                <div className="flex flex-col gap-1 mt-1 max-h-[160px] overflow-y-auto pr-1 select-none custom-scrollbar">
+                                                    {(creationMode === 'video' ? MODEL_OPTIONS.video : MODEL_OPTIONS.image).map(preset => {
+                                                        const isSelected = (creationMode === 'video' && videoGenModel === preset.id) || 
+                                                                           (creationMode === 'image' && preferredImageModel === preset.id);
+                                                        
+                                                        return (
+                                                            <button 
+                                                                key={preset.id}
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    if (creationMode === 'video') setVideoGenModel(preset.id as any);
+                                                                    else setPreferredImageModel(preset.id as any);
+                                                                    setAutoModelSelect(false);
+                                                                    setShowModelPicker(false);
+                                                                }}
+                                                                className={`text-left px-3 py-2.5 rounded-xl transition-all w-full flex items-center justify-between group ${
+                                                                    isSelected ? 'bg-black text-white' : 'hover:bg-gray-100 text-gray-700'
+                                                                }`}
+                                                            >
+                                                                <div className="flex items-center gap-2.5">
+                                                                    <div className={`w-6 h-6 rounded-md flex items-center justify-center ${isSelected ? 'bg-white/10 text-white' : 'bg-white shadow-sm border border-gray-100 text-gray-600'}`}>
+                                                                        <preset.icon size={13} strokeWidth={2.5} />
+                                                                    </div>
+                                                                    <div className="flex flex-col">
+                                                                        <div className="flex items-center gap-1.5">
+                                                                            <span className={`text-[13px] font-bold ${isSelected ? 'text-white' : 'text-gray-900 group-hover:text-black'}`}>{preset.name}</span>
+                                                                            {preset.badge && (
+                                                                                <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-bold ${
+                                                                                    isSelected ? 'bg-white/20 text-white' : 'bg-blue-50 text-blue-500 border border-blue-100/50'
+                                                                                }`}>
+                                                                                    {preset.badge}
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                {isSelected && <Check size={14} className="text-white shrink-0" />}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+
+                                                <div className="text-[10px] text-gray-400 font-medium px-1 leading-relaxed mt-1">
+                                                    选择快捷预设或直接输入。若未找到通道可能导致响应失败。
+                                                </div>
                                             </div>
                                         </div>
                                     )}
@@ -998,65 +1042,97 @@ export const InputArea: React.FC<InputAreaProps> = ({
                                                 ))}
                                             </div>
 
-                                            {/* Model List */}
-                                            <div className="space-y-2.5 max-h-[420px] overflow-y-auto pr-1 group/list custom-scrollbar">
-                                                <AnimatePresence mode="wait">
-                                                    <motion.div
-                                                        key={modelPreferenceTab}
-                                                        initial={{ opacity: 0, y: 10 }}
-                                                        animate={{ opacity: 1, y: 0 }}
-                                                        exit={{ opacity: 0, y: -10 }}
-                                                        transition={{ duration: 0.2 }}
-                                                        className="space-y-2.5"
-                                                    >
-                                                        {MODEL_OPTIONS[modelPreferenceTab].map((m) => {
-                                                            const isSelected = !autoModelSelect && (
-                                                                (modelPreferenceTab === 'image' && preferredImageModel === m.id) ||
-                                                                (modelPreferenceTab === 'video' && preferredVideoModel === m.id) ||
-                                                                (modelPreferenceTab === '3d' && preferred3DModel === m.id)
-                                                            );
+                                            {/* Model Input */}
+                                            <div className="space-y-4 px-1 pb-2">
+                                                <div className="text-[11px] font-bold text-gray-600 uppercase">
+                                                    {modelPreferenceTab === 'image' ? '图像' : modelPreferenceTab === 'video' ? '视频' : '3D'} 生成调度模型
+                                                </div>
+                                                <input
+                                                    type="text"
+                                                    value={
+                                                        modelPreferenceTab === 'image' ? preferredImageModel :
+                                                        modelPreferenceTab === 'video' ? preferredVideoModel :
+                                                        preferred3DModel
+                                                    }
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        if (modelPreferenceTab === 'image') setPreferredImageModel(val as any);
+                                                        else if (modelPreferenceTab === 'video') setPreferredVideoModel(val as any);
+                                                        else setPreferred3DModel(val as any);
+                                                        setAutoModelSelect(false);
+                                                    }}
+                                                    placeholder={`填写自定义或选择下方预设`}
+                                                    className={`w-full px-4 py-3 bg-gray-50/50 border hover:bg-white focus:bg-white rounded-xl text-[13px] text-gray-800 font-bold outline-none focus:ring-4 focus:ring-black/5 transition-all ${!autoModelSelect ? 'border-black' : 'border-gray-200 focus:border-black'}`}
+                                                />
+                                                
+                                                {/* Preset List */}
+                                                <div className="flex flex-col gap-1.5 mt-2 max-h-[220px] overflow-y-auto pr-2 select-none custom-scrollbar border-b border-gray-100 pb-4">
+                                                    {(modelPreferenceTab === 'video' ? MODEL_OPTIONS.video : 
+                                                      modelPreferenceTab === 'image' ? MODEL_OPTIONS.image : MODEL_OPTIONS['3d']).map(preset => {
+                                                        const isSelected = (modelPreferenceTab === 'video' && preferredVideoModel === preset.id) || 
+                                                                           (modelPreferenceTab === 'image' && preferredImageModel === preset.id) ||
+                                                                           (modelPreferenceTab === '3d' && preferred3DModel === preset.id);
 
-                                                            return (
-                                                                <div
-                                                                    key={m.id}
-                                                                    onClick={() => {
-                                                                        if (modelPreferenceTab === 'image') setPreferredImageModel(m.id as ImageModel);
-                                                                        else if (modelPreferenceTab === 'video') setPreferredVideoModel(m.id as VideoModel);
-                                                                        else setPreferred3DModel(m.id);
-                                                                        setAutoModelSelect(false);
-                                                                    }}
-                                                                    className={`group flex items-start gap-4 p-4 rounded-[24px] cursor-pointer transition-all duration-300 border ${isSelected ? 'bg-black text-white border-black shadow-xl shadow-black/10' : 'bg-white border-gray-100/50 hover:border-gray-300 hover:shadow-md'}`}
-                                                                >
-                                                                    <div className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-colors shrink-0 ${isSelected ? 'bg-white/10 text-white border border-white/10' : 'bg-gray-50 text-gray-400 border border-gray-100 group-hover:bg-gray-100 group-hover:text-gray-600'}`}>
-                                                                        <m.icon size={22} strokeWidth={1.5} />
+                                                        return (
+                                                            <button 
+                                                                key={preset.id}
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    if (modelPreferenceTab === 'video') setPreferredVideoModel(preset.id as any);
+                                                                    else if (modelPreferenceTab === 'image') setPreferredImageModel(preset.id as any);
+                                                                    else setPreferred3DModel(preset.id as any);
+                                                                    setAutoModelSelect(false);
+                                                                    setShowModelPreference(false);
+                                                                }}
+                                                                className={`text-left p-3 rounded-2xl transition-all border ${
+                                                                    isSelected 
+                                                                    ? 'bg-gray-50/80 border-gray-200/60 shadow-sm' 
+                                                                    : 'bg-transparent border-transparent hover:bg-gray-50/50 hover:border-gray-100'
+                                                                }`}
+                                                            >
+                                                                <div className="flex gap-3">
+                                                                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                                                                        isSelected ? 'bg-black text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-700 shadow-sm'
+                                                                    }`}>
+                                                                        <preset.icon size={16} strokeWidth={2} />
                                                                     </div>
-                                                                    <div className="flex-1 min-w-0">
-                                                                        <div className="flex items-center justify-between mb-1">
-                                                                            <h4 className={`text-[14px] font-bold truncate ${isSelected ? 'text-white' : 'text-gray-900 font-display'}`}>{m.name}</h4>
-                                                                            {m.badge && (
-                                                                                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-lg uppercase tracking-tight whitespace-nowrap ml-2 ${isSelected ? 'bg-white/20 text-white' : 'bg-blue-50 text-blue-600 border border-blue-100'}`}>
-                                                                                    {m.badge}
+                                                                    <div className="flex flex-col flex-1 min-w-0 justify-center">
+                                                                        <div className="flex items-center justify-between mb-0.5">
+                                                                            <div className="flex items-center gap-2">
+                                                                                <span className={`text-[14px] font-bold ${isSelected ? 'text-gray-900' : 'text-gray-700'}`}>
+                                                                                    {preset.name}
                                                                                 </span>
+                                                                                {preset.badge && (
+                                                                                    <span className="text-[10px] px-1.5 py-0.5 rounded-md font-bold bg-blue-50 text-blue-500 border border-blue-100/50">
+                                                                                        {preset.badge}
+                                                                                    </span>
+                                                                                )}
+                                                                            </div>
+                                                                            {isSelected && (
+                                                                                <div className="w-5 h-5 rounded-md bg-white border border-gray-200 flex items-center justify-center shadow-sm">
+                                                                                    <Check size={12} className="text-black" strokeWidth={3} />
+                                                                                </div>
                                                                             )}
                                                                         </div>
-                                                                        <p className={`text-[11px] leading-[1.4] mb-2 line-clamp-2 ${isSelected ? 'text-white/60' : 'text-gray-400 font-medium'}`}>
-                                                                            {m.desc}
-                                                                        </p>
-                                                                        {m.time && (
-                                                                            <span className={`inline-flex px-2 py-0.5 rounded-lg text-[10px] font-bold ${isSelected ? 'bg-white/15 text-white' : 'bg-gray-100/80 text-gray-500'}`}>
-                                                                                {m.time}
-                                                                            </span>
+                                                                        <span className="text-xs text-gray-500 font-medium truncate">{preset.desc}</span>
+                                                                        {preset.time && (
+                                                                            <div className="mt-1.5 flex items-center">
+                                                                                <span className="text-[10px] font-bold text-gray-400 bg-gray-100/80 px-1.5 py-0.5 rounded-md">
+                                                                                    {preset.time}
+                                                                                </span>
+                                                                            </div>
                                                                         )}
                                                                     </div>
-                                                                    <div className={`w-5 h-5 rounded-full border flex items-center justify-center mt-1 shrink-0 transition-all ${isSelected ? 'bg-white border-white scale-110 shadow-sm' : 'border-gray-200 group-hover:border-gray-400'}`}>
-                                                                        {isSelected && <Check size={12} className="text-black" strokeWidth={3} />}
-                                                                        {!isSelected && !autoModelSelect && <div className="w-1.5 h-1.5 rounded-full bg-gray-100 opacity-0 group-hover:opacity-100 transition-opacity" />}
-                                                                    </div>
                                                                 </div>
-                                                            );
-                                                        })}
-                                                    </motion.div>
-                                                </AnimatePresence>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+
+                                                <p className="text-[11px] text-gray-400 font-medium leading-relaxed pt-2">
+                                                    绕过原有选择限制。系统将会将您的请求调度至设定的模型。填入的值须确保您绑定的 API 供应商提供支持。<br/>
+                                                    若在特定任务中由于未找到模型导致失败，重试前请核对模型标识符。
+                                                </p>
                                             </div>
                                         </div>
                                     )}

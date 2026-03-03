@@ -24,15 +24,12 @@ import {
   ShoppingCart,
   Palette,
   Star,
-  Sparkles,
   Settings,
 } from "lucide-react";
 import { Project } from "../types";
 import { getProjects } from "../services/storage";
 import { SettingsModal } from "../components/SettingsModal";
 import Sidebar from "../components/Sidebar";
-
-
 
 const Header = () => (
   <header className="fixed top-0 left-0 right-0 h-16 px-8 flex items-center justify-between z-40 bg-white/70 backdrop-blur-md border-b border-white/20 shadow-sm shadow-gray-100/20">
@@ -153,7 +150,6 @@ const Home: React.FC<{ onExit?: () => void }> = ({ onExit }) => {
   const [imageModelEnabled, setImageModelEnabled] = useState(false); // Cube icon: "Nano Banana Pro"
 
   // UI States
-  const [agentMode, setAgentMode] = useState(false);
 
   useEffect(() => {
     // Load top 5 recent projects
@@ -200,7 +196,7 @@ const Home: React.FC<{ onExit?: () => void }> = ({ onExit }) => {
       <Sidebar />
       {onExit && (
         <button
-          onClick={onExit}
+          onClick={onExit || (() => navigate("/dashboard"))}
           className="fixed top-24 left-6 z-[60] px-4 py-2 bg-white backdrop-blur-md border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 hover:text-gray-900 transition-all font-medium text-sm flex items-center gap-2 shadow-sm"
         >
           <svg
@@ -313,18 +309,6 @@ const Home: React.FC<{ onExit?: () => void }> = ({ onExit }) => {
                       accept=".doc,.docx,.pdf,.md,.txt,.jpg,.jpeg,.png,.webp"
                     />
                   </div>
-
-                  <button
-                    onClick={() => setAgentMode(!agentMode)}
-                    className={`h-9 px-4 rounded-full border flex items-center gap-1.5 text-sm font-medium transition-all duration-300 ${
-                      agentMode
-                        ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                        : "bg-white border-border text-muted-foreground hover:bg-muted hover:text-foreground"
-                    }`}
-                  >
-                    <Sparkles size={14} />
-                    Agent
-                  </button>
                 </div>
 
                 {/* Right: Controls */}

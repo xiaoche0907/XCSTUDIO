@@ -7412,7 +7412,7 @@ const Workspace: React.FC = () => {
         >
           <div className="flex items-center gap-3 pointer-events-auto">
             <button
-              onClick={() => navigate("/")}
+              onClick={() => navigate("/dashboard")}
               className="w-9 h-9 bg-black rounded-full flex items-center justify-center text-white font-bold text-[10px] tracking-wide shadow-sm hover:scale-105 transition"
             >
               XC

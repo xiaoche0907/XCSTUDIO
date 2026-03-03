@@ -10,7 +10,7 @@ const VideoWorkspace: React.FC = () => {
         <div className="flex relative h-screen w-full bg-[#0a0a0c] overflow-hidden">
             {/* 返回首页按钮 */}
             <button
-                onClick={() => navigate('/')}
+                onClick={() => navigate('/dashboard')}
                 className="absolute top-6 left-6 z-[100] flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-full backdrop-blur-md border border-white/5 transition-all shadow-lg hover:scale-105"
             >
                 <Home size={18} />

@@ -10,22 +10,22 @@ interface SettingsCardProps {
 
 export const SettingsCard: React.FC<SettingsCardProps> = ({ title, description, icon, children, badge }) => {
     return (
-        <div className="bg-card border border-border/60 rounded-lg p-6 shadow-premium hover:shadow-hover transition-all duration-300">
-            <div className="flex items-start justify-between mb-6">
+        <div className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm hover:shadow-premium transition-all duration-300">
+            <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-4">
-                    <div className="p-3 bg-primary/5 text-primary rounded-md ring-1 ring-primary/10">
+                    <div className="p-2 bg-gray-50 text-black rounded-lg border border-gray-100">
                         {icon}
                     </div>
                     <div>
-                        <h3 className="text-lg font-display font-semibold text-foreground tracking-tight flex items-center gap-2">
+                        <h3 className="text-xl font-display font-semibold text-foreground tracking-tight flex items-center gap-2">
                             {title}
                             {badge && (
-                                <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] uppercase font-bold tracking-wider">
+                                <span className="px-2 py-0.5 rounded-full bg-black/5 text-black text-[11px] uppercase font-bold tracking-wider border border-black/10">
                                     {badge}
                                 </span>
                             )}
                         </h3>
-                        {description && <p className="text-xs text-muted-foreground mt-1 leading-relaxed max-w-sm">{description}</p>}
+                        {description && <p className="text-sm text-muted-foreground mt-1 leading-relaxed max-w-sm">{description}</p>}
                     </div>
                 </div>
             </div>
