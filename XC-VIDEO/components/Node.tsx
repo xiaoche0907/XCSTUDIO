@@ -64,7 +64,7 @@ const MODEL_CONFIGS: Record<string, any> = {
     'sora-2': {
         ratios: ['1:1', '4:3', '3:4', '16:9', '9:16', '21:9'],
         resolutions: ['720p'],
-        durations: [4, 8, 12]
+        durations: [4, 8, 10, 12, 15]
     },
     'kling-3.0': {
         ratios: ['16:9', '9:16', '1:1'],

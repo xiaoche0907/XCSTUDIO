@@ -16,7 +16,8 @@ import { saveToStorage, loadFromStorage } from './services/storage';
 import {
     Plus, Copy, Trash2, Type, Image as ImageIcon, Video as VideoIcon,
     ScanFace, Brush, MousePointerClick, LayoutTemplate, X, Film, Link, RefreshCw, Upload,
-    Minus, FolderHeart, Unplug, Sparkles, ChevronLeft, ChevronRight, Scan, Music, Mic2, Loader2
+    Minus, FolderHeart, Unplug, Sparkles, ChevronLeft, ChevronRight, Scan, Music, Mic2, Loader2,
+    FileSearch, Edit
 } from 'lucide-react';
 
 // Apple Physics Curve
@@ -446,7 +447,7 @@ export const App = () => {
             model: type === NodeType.VIDEO_GENERATOR ? 'veo-3.1-fast-generate-preview' :
                 type === NodeType.VIDEO_ANALYZER ? 'gemini-3-pro-preview' :
                     type === NodeType.AUDIO_GENERATOR ? 'gemini-2.5-flash-preview-tts' :
-                        type.includes('IMAGE') ? 'gemini-2.5-flash-image' :
+                        type.includes('IMAGE') ? 'gemini-3-pro-image-preview' :
                             'gemini-3-pro-preview',
             generationMode: type === NodeType.VIDEO_GENERATOR ? 'DEFAULT' : undefined, // Initialize as DEFAULT (Off)
             ...initialData

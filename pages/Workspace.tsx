@@ -1133,12 +1133,12 @@ const Workspace: React.FC = () => {
       y: centerY - 320,
       width: 480,
       height: 640,
-      zIndex: elements.length + 1,
+      zIndex: elementsRef.current.length + 1,
       genPrompt: label || "服装棚拍组图",
     };
-    const next = [...elements, newEl];
-    setElements(next);
-    saveToHistory(next, markers);
+    const next = [...elementsRef.current, newEl];
+    setElementsSynced(next);
+    saveToHistory(next, markersRef.current);
     setSelectedElementId(newEl.id);
   };
 
@@ -1699,8 +1699,9 @@ const Workspace: React.FC = () => {
         const img = new Image();
         img.src = result;
         img.onload = () => {
-          setElements((prev) =>
-            prev.map((e) =>
+          let nextElements: CanvasElement[] = [];
+          setElements((prev) => {
+            nextElements = prev.map((e) =>
               e.id === newId
                 ? {
                     ...e,
@@ -1710,16 +1711,28 @@ const Workspace: React.FC = () => {
                     height: targetSize.height,
                   }
                 : e,
-            ),
-          );
-          saveToHistory(elements, markers);
+            );
+            elementsRef.current = nextElements;
+            return nextElements;
+          });
+          if (nextElements.length > 0) {
+            saveToHistory(nextElements, markersRef.current);
+          }
         };
       } else {
-        setElements((prev) => prev.filter((e) => e.id !== newId));
+        setElements((prev) => {
+          const next = prev.filter((e) => e.id !== newId);
+          elementsRef.current = next;
+          return next;
+        });
       }
     } catch (e) {
       console.error("Upscale failed:", e);
-      setElements((prev) => prev.filter((e) => e.id !== newId));
+      setElements((prev) => {
+        const next = prev.filter((e) => e.id !== newId);
+        elementsRef.current = next;
+        return next;
+      });
     }
   };
 
@@ -2020,8 +2033,11 @@ const Workspace: React.FC = () => {
   } = useAgentOrchestrator({
     projectContext,
     canvasState: { elements, pan, zoom, showAssistant },
-    onElementsUpdate: setElements,
-    onHistorySave: (els) => saveToHistory(els, markers),
+    onElementsUpdate: (els) => {
+      elementsRef.current = els;
+      setElements(els);
+    },
+    onHistorySave: (els) => saveToHistory(els, markersRef.current),
     autoAddToCanvas: true,
   });
 
@@ -2432,7 +2448,7 @@ const Workspace: React.FC = () => {
       )
       .map((block) => (block.file as any).markerId as string);
 
-    setMarkers((prev) => {
+    setMarkersSynced((prev) => {
       // If there are no marker files in input but there are markers, clear them
       // This handles the case when user removes all marker chips
       if (!hasMarkerFiles && prev.length > 0) {
@@ -2624,12 +2640,42 @@ const Workspace: React.FC = () => {
     setHistoryStep(newHistory.length - 1);
   };
 
+  const setElementsSynced = (nextElements: CanvasElement[]) => {
+    elementsRef.current = nextElements;
+    setElements(nextElements);
+  };
+
+  const setMarkersSynced = (
+    nextMarkers: Marker[] | ((prev: Marker[]) => Marker[]),
+  ) => {
+    setMarkers((prev) => {
+      const resolved =
+        typeof nextMarkers === "function"
+          ? (nextMarkers as (prev: Marker[]) => Marker[])(prev)
+          : nextMarkers;
+      markersRef.current = resolved;
+      return resolved;
+    });
+  };
+
+  const updateMarkersAndSaveHistory = (nextMarkers: Marker[]) => {
+    setMarkersSynced(nextMarkers);
+    saveToHistory(elementsRef.current, nextMarkers);
+  };
+
+  const appendElementsAndSaveHistory = (items: CanvasElement[]) => {
+    if (items.length === 0) return;
+    const nextElements = [...elementsRef.current, ...items];
+    setElementsSynced(nextElements);
+    saveToHistory(nextElements, markersRef.current);
+  };
+
   const undo = () => {
     if (historyStep > 0) {
       const prevStep = historyStep - 1;
       setHistoryStep(prevStep);
-      setElements(history[prevStep].elements);
-      setMarkers(history[prevStep].markers);
+      setElementsSynced(history[prevStep].elements);
+      setMarkersSynced(history[prevStep].markers);
     }
   };
 
@@ -2637,8 +2683,8 @@ const Workspace: React.FC = () => {
     if (historyStep < history.length - 1) {
       const nextStep = historyStep + 1;
       setHistoryStep(nextStep);
-      setElements(history[nextStep].elements);
-      setMarkers(history[nextStep].markers);
+      setElementsSynced(history[nextStep].elements);
+      setMarkersSynced(history[nextStep].markers);
     }
   };
 
@@ -2654,9 +2700,8 @@ const Workspace: React.FC = () => {
     if (block.file && (block.file as any).markerId) {
       const markerId = (block.file as any).markerId;
       // 修复：仅过滤掉被删除的标记，不再重排剩余标记的 ID，以保持 React key 的稳定性
-      const newMarkers = markers.filter((m) => m.id !== markerId);
-      setMarkers(newMarkers);
-      saveToHistory(elements, newMarkers);
+      const newMarkers = markersRef.current.filter((m) => m.id !== markerId);
+      updateMarkersAndSaveHistory(newMarkers);
     }
 
     // Remove the block
@@ -2719,7 +2764,7 @@ const Workspace: React.FC = () => {
     if (!id || isLoadingRecord.current) return;
     const save = async () => {
       if (isLoadingRecord.current) return;
-      const firstImage = elements.find(
+      const firstImage = elementsRef.current.find(
         (el) => el.type === "image" || el.type === "gen-image",
       );
       const thumbnail = firstImage?.url || "";
@@ -2727,8 +2772,8 @@ const Workspace: React.FC = () => {
         id,
         title: projectTitle,
         updatedAt: formatDate(Date.now()),
-        elements,
-        markers,
+        elements: elementsRef.current,
+        markers: markersRef.current,
         thumbnail,
         conversations,
       });
@@ -2739,7 +2784,7 @@ const Workspace: React.FC = () => {
 
   const updateSelectedElement = (updates: Partial<CanvasElement>) => {
     if (!selectedElementId) return;
-    const newElements = elements.map((el) => {
+    const newElements = elementsRef.current.map((el) => {
       if (el.id === selectedElementId) {
         let updatedEl = { ...el, ...updates };
         if (
@@ -2767,8 +2812,8 @@ const Workspace: React.FC = () => {
       }
       return el;
     });
-    setElements(newElements);
-    saveToHistory(newElements, markers);
+    setElementsSynced(newElements);
+    saveToHistory(newElements, markersRef.current);
   };
 
   const deleteSelectedElement = () => {
@@ -2780,13 +2825,13 @@ const Workspace: React.FC = () => {
           : [];
     if (idsToDelete.length === 0) return;
 
-    const newElements = elements.filter((el) => !idsToDelete.includes(el.id));
-    const newMarkers = markers.filter(
+    const newElements = elementsRef.current.filter((el) => !idsToDelete.includes(el.id));
+    const newMarkers = markersRef.current.filter(
       (m) => !idsToDelete.includes(m.elementId),
     );
 
-    setElements(newElements);
-    setMarkers(newMarkers);
+    setElementsSynced(newElements);
+    setMarkersSynced(newMarkers);
     setSelectedElementId(null);
     setSelectedElementIds([]);
     saveToHistory(newElements, newMarkers);
@@ -3123,8 +3168,8 @@ const Workspace: React.FC = () => {
 
         // 1. 立即同步清空当前项目的本地状态，防止 UI 闪烁旧数据
         // 不使用 prev => ... 以确保绝对的清空
-        setElements([]);
-        setMarkers([]);
+        setElementsSynced([]);
+        setMarkersSynced([]);
         setConversations([]);
         setProjectTitle("未命名");
         setHistory([{ elements: [], markers: [] }]);
@@ -3140,7 +3185,7 @@ const Workspace: React.FC = () => {
           const project = await getProject(id);
           if (project) {
             console.log("[Workspace] Project found, restoring state");
-            if (project.elements) setElements(project.elements);
+            if (project.elements) setElementsSynced(project.elements);
             if (project.title) setProjectTitle(project.title);
             if (project.conversations && project.conversations.length > 0) {
               setConversations(project.conversations);
@@ -3643,11 +3688,11 @@ const Workspace: React.FC = () => {
       y: centerY - height / 2,
       width,
       height,
-      zIndex: elements.length + 1,
+      zIndex: elementsRef.current.length + 1,
     };
-    const newElements = [...elements, newElement];
-    setElements(newElements);
-    saveToHistory(newElements, markers);
+    const newElements = [...elementsRef.current, newElement];
+    setElementsSynced(newElements);
+    saveToHistory(newElements, markersRef.current);
   };
 
   const addShape = (shapeType: ShapeType) => {
@@ -3669,11 +3714,11 @@ const Workspace: React.FC = () => {
       strokeWidth: 2,
       cornerRadius: 0,
       aspectRatioLocked: false,
-      zIndex: elements.length + 1,
+      zIndex: elementsRef.current.length + 1,
     };
-    const newElements = [...elements, newElement];
-    setElements(newElements);
-    saveToHistory(newElements, markers);
+    const newElements = [...elementsRef.current, newElement];
+    setElementsSynced(newElements);
+    saveToHistory(newElements, markersRef.current);
     setSelectedElementId(newElement.id);
     setShowShapeMenu(false);
   };
@@ -3697,11 +3742,11 @@ const Workspace: React.FC = () => {
       fillColor: "#000000",
       strokeColor: "transparent",
       textAlign: "left",
-      zIndex: elements.length + 1,
+      zIndex: elementsRef.current.length + 1,
     };
-    const newElements = [...elements, newElement];
-    setElements(newElements);
-    saveToHistory(newElements, markers);
+    const newElements = [...elementsRef.current, newElement];
+    setElementsSynced(newElements);
+    saveToHistory(newElements, markersRef.current);
     setSelectedElementId(newElement.id);
   };
   const addGenImage = () => {
@@ -3722,9 +3767,9 @@ const Workspace: React.FC = () => {
       genResolution: "1K",
       genPrompt: "",
     };
-    const newElements = [...elements, newElement];
-    setElements(newElements);
-    saveToHistory(newElements, markers);
+    const newElements = [...elementsRef.current, newElement];
+    setElementsSynced(newElements);
+    saveToHistory(newElements, markersRef.current);
     setSelectedElementId(newElement.id);
   };
   const addGenVideo = () => {
@@ -3765,9 +3810,9 @@ const Workspace: React.FC = () => {
         : undefined,
       genVideoRefs: videoMultiRefs.map((f) => URL.createObjectURL(f)),
     };
-    const newElements = [...elements, newElement];
-    setElements(newElements);
-    saveToHistory(newElements, markers);
+    const newElements = [...elementsRef.current, newElement];
+    setElementsSynced(newElements);
+    saveToHistory(newElements, markersRef.current);
     setSelectedElementId(newElement.id);
   };
 
@@ -3788,12 +3833,9 @@ const Workspace: React.FC = () => {
   };
 
   const handleGenImage = async (elementId: string) => {
-    const el = elements.find((e) => e.id === elementId);
+    const el = elementsRef.current.find((e) => e.id === elementId);
     if (!el || !el.genPrompt) return;
-    const update1 = elements.map((e) =>
-      e.id === elementId ? { ...e, isGenerating: true } : e,
-    );
-    setElements(update1);
+    setElementGeneratingState(elementId, true);
     const currentAspectRatio = getClosestAspectRatio(el.width, el.height);
     const model = (el.genModel as any) || "Nano Banana Pro";
     try {
@@ -3808,17 +3850,11 @@ const Workspace: React.FC = () => {
       if (resultUrl) {
         await applyGeneratedImageToElement(elementId, resultUrl, true);
       } else {
-        const updateFail = elements.map((e) =>
-          e.id === elementId ? { ...e, isGenerating: false } : e,
-        );
-        setElements(updateFail);
+        setElementGeneratingState(elementId, false);
       }
     } catch (e) {
       console.error(e);
-      const updateFail = elements.map((e) =>
-        e.id === elementId ? { ...e, isGenerating: false } : e,
-      );
-      setElements(updateFail);
+      setElementGeneratingState(elementId, false);
     }
   };
 
@@ -3891,12 +3927,9 @@ const Workspace: React.FC = () => {
   }, [elements, showAssistant]);
 
   const handleGenVideo = async (elementId: string) => {
-    const el = elements.find((e) => e.id === elementId);
+    const el = elementsRef.current.find((e) => e.id === elementId);
     if (!el || !el.genPrompt) return;
-    const update1 = elements.map((e) =>
-      e.id === elementId ? { ...e, isGenerating: true } : e,
-    );
-    setElements(update1);
+    setElementGeneratingState(elementId, true);
 
     // Helper: convert blob URL to base64 data URI
     const blobToBase64 = async (url: string): Promise<string> => {
@@ -3940,18 +3973,15 @@ const Workspace: React.FC = () => {
         referenceImages: refImages,
       });
       if (resultUrl) {
-        const update2 = elements.map((e) =>
+        const update2 = elementsRef.current.map((e) =>
           e.id === elementId
             ? { ...e, isGenerating: false, url: resultUrl }
             : e,
         );
-        setElements(update2);
-        saveToHistory(update2, markers);
+        setElementsSynced(update2);
+        saveToHistory(update2, markersRef.current);
       } else {
-        const updateFail = elements.map((e) =>
-          e.id === elementId ? { ...e, isGenerating: false } : e,
-        );
-        setElements(updateFail);
+        setElementGeneratingState(elementId, false);
         addMessage({
           id: Date.now().toString(),
           role: "model",
@@ -3961,10 +3991,7 @@ const Workspace: React.FC = () => {
       }
     } catch (e: any) {
       console.error(e);
-      const updateFail = elements.map((e2) =>
-        e2.id === elementId ? { ...e2, isGenerating: false } : e2,
-      );
-      setElements(updateFail);
+      setElementGeneratingState(elementId, false);
       const errMsg = e?.message || "未知错误";
       addMessage({
         id: Date.now().toString(),
@@ -3984,15 +4011,12 @@ const Workspace: React.FC = () => {
 
     let addedCount = 0;
     const newElementsToAppend: CanvasElement[] = [];
+    const baseZIndex = elementsRef.current.length;
 
     const checkDone = () => {
       addedCount++;
       if (addedCount === files.length) {
-        if (newElementsToAppend.length > 0) {
-          const finalElements = [...elements, ...newElementsToAppend];
-          setElements(finalElements);
-          saveToHistory(finalElements, markers);
-        }
+        appendElementsAndSaveHistory(newElementsToAppend);
       }
     };
 
@@ -4028,7 +4052,7 @@ const Workspace: React.FC = () => {
               y: centerY - displayHeight / 2 + offset,
               width: displayWidth,
               height: displayHeight,
-              zIndex: elements.length + index + 1,
+              zIndex: baseZIndex + index + 1,
               genAspectRatio: `${originalWidth}:${originalHeight}`,
             };
             newElementsToAppend.push(newElement);
@@ -4058,7 +4082,7 @@ const Workspace: React.FC = () => {
                 y: centerY - fitted.displayH / 2 + offset,
                 width: fitted.displayW,
                 height: fitted.displayH,
-                zIndex: elements.length + index + 1,
+                zIndex: baseZIndex + index + 1,
                 genAspectRatio: `${Math.max(1, img.width)}:${Math.max(1, img.height)}`,
               });
               checkDone();
@@ -4087,7 +4111,7 @@ const Workspace: React.FC = () => {
             y: centerY - height / 2 + offset,
             width,
             height,
-            zIndex: elements.length + index + 1,
+            zIndex: baseZIndex + index + 1,
           };
           newElementsToAppend.push(newElement);
           checkDone();
@@ -4117,13 +4141,10 @@ const Workspace: React.FC = () => {
 
     let addedCount = 0;
     const newElementsToAppend: CanvasElement[] = [];
+    const baseZIndex = elementsRef.current.length;
     const checkDone = () => {
       addedCount++;
-      if (addedCount === files.length && newElementsToAppend.length > 0) {
-        const finalElements = [...elements, ...newElementsToAppend];
-        setElements(finalElements);
-        saveToHistory(finalElements, markers);
-      }
+      if (addedCount === files.length) appendElementsAndSaveHistory(newElementsToAppend);
     };
 
     files.forEach((file, index) => {
@@ -4153,7 +4174,7 @@ const Workspace: React.FC = () => {
               y: canvasDropY - displayHeight / 2 + offset,
               width: displayWidth,
               height: displayHeight,
-              zIndex: elements.length + index + 1,
+              zIndex: baseZIndex + index + 1,
               genAspectRatio: `${originalWidth}:${originalHeight}`,
             });
           } catch (error) {
@@ -4178,7 +4199,7 @@ const Workspace: React.FC = () => {
                 y: canvasDropY - fitted.displayH / 2 + offset,
                 width: fitted.displayW,
                 height: fitted.displayH,
-                zIndex: elements.length + index + 1,
+                zIndex: baseZIndex + index + 1,
                 genAspectRatio: `${Math.max(1, img.width)}:${Math.max(1, img.height)}`,
               });
               checkDone();
@@ -4203,7 +4224,7 @@ const Workspace: React.FC = () => {
             y: canvasDropY - height / 2 + offset,
             width,
             height,
-            zIndex: elements.length + index + 1,
+            zIndex: baseZIndex + index + 1,
           });
           checkDone();
         })();
@@ -4531,7 +4552,7 @@ const Workspace: React.FC = () => {
       setResizeHandle(null);
       const preview = resizePreviewRef.current;
       if (preview) {
-        const nextElements = elements.map((el) => {
+        const nextElements = elementsRef.current.map((el) => {
           if (el.id === preview.id) {
             const ar = getClosestAspectRatio(preview.width, preview.height);
             return {
@@ -4545,8 +4566,8 @@ const Workspace: React.FC = () => {
           }
           return el;
         });
-        setElements(nextElements);
-        saveToHistory(nextElements, markers);
+        setElementsSynced(nextElements);
+        saveToHistory(nextElements, markersRef.current);
       }
       resizePreviewRef.current = null;
     }
@@ -4561,13 +4582,17 @@ const Workspace: React.FC = () => {
       // Commit drag positions from ref to React state
       const offsets = dragOffsetsRef.current;
       if (Object.keys(offsets).length > 0) {
+        let committedElements: CanvasElement[] = [];
         setElements((prev) =>
-          prev.map((el) => {
+          (committedElements = prev.map((el) => {
             const pos = offsets[el.id];
             if (pos) return { ...el, x: pos.x, y: pos.y };
             return el;
-          }),
+          })),
         );
+        if (committedElements.length > 0) {
+          elementsRef.current = committedElements;
+        }
         dragOffsetsRef.current = {};
         // Save to history if position actually changed
         const el = elements.find((e) => e.id === selectedElementId);
@@ -4577,12 +4602,14 @@ const Workspace: React.FC = () => {
             offsets[selectedElementId]?.y !== elementStartPos.y)
         ) {
           // Use setTimeout to ensure setElements has committed
-          setTimeout(() => saveToHistory(elements, markers), 0);
+          setTimeout(() => {
+            saveToHistory(elementsRef.current, markersRef.current);
+          }, 0);
         }
       } else {
-        const el = elements.find((e) => e.id === selectedElementId);
+        const el = elementsRef.current.find((e) => e.id === selectedElementId);
         if (el && (el.x !== elementStartPos.x || el.y !== elementStartPos.y)) {
-          saveToHistory(elements, markers);
+          saveToHistory(elementsRef.current, markersRef.current);
         }
       }
     }
@@ -4759,7 +4786,7 @@ const Workspace: React.FC = () => {
                   // 触发 inputBlocks 重新渲染
                   setInputBlocks([...useAgentStore.getState().inputBlocks]);
                   // 同步更新 markers 状态中的 analysis
-                  setMarkers((prev) =>
+                  setMarkersSynced((prev) =>
                     prev.map((m) =>
                       m.id === newMarkerId ? { ...m, analysis: trimmed } : m,
                     ),
@@ -4774,11 +4801,10 @@ const Workspace: React.FC = () => {
       }
 
       const newMarkers = [
-        ...markers,
+        ...markersRef.current,
         { id: newMarkerId, x, y, elementId: id, cropUrl },
       ];
-      setMarkers(newMarkers);
-      saveToHistory(elements, newMarkers);
+      updateMarkersAndSaveHistory(newMarkers);
 
       // 缩放聚焦动画 — 平滑缩放到标记位置（Lovart style）
       if (el && containerRef.current) {
@@ -4893,11 +4919,10 @@ const Workspace: React.FC = () => {
     });
   };
   const handleSaveMarkerLabel = (markerId: string, label: string) => {
-    const newMarkers = markers.map((m) =>
+    const newMarkers = markersRef.current.map((m) =>
       m.id === markerId ? { ...m, label } : m,
     );
-    setMarkers(newMarkers);
-    saveToHistory(elements, newMarkers);
+    updateMarkersAndSaveHistory(newMarkers);
     setEditingMarkerId(null);
 
     // 同步更新侧边栏 Chip名称
@@ -4917,9 +4942,8 @@ const Workspace: React.FC = () => {
   };
 
   const removeMarker = (id: string) => {
-    const newMarkers = markers.filter((m) => m.id !== id);
-    setMarkers(newMarkers);
-    saveToHistory(elements, newMarkers);
+    const newMarkers = markersRef.current.filter((m) => m.id !== id);
+    updateMarkersAndSaveHistory(newMarkers);
     // 同步删除对应 chip
     const currentBlocks = useAgentStore.getState().inputBlocks;
     const filtered = currentBlocks.filter(
@@ -4982,7 +5006,7 @@ const Workspace: React.FC = () => {
     setActiveConversationId(createConversationId());
     clearMessages();
     setInputBlocks([{ id: "init", type: "text", text: "" }]);
-    setMarkers([]);
+    setMarkersSynced([]);
     setWebEnabled(false);
     setHistoryStep(0);
     chatSessionRef.current = createChatSession("gemini-3-pro-preview");
@@ -6766,7 +6790,7 @@ const Workspace: React.FC = () => {
     const cX = (minX + maxX) / 2;
     const cY = (minY + maxY) / 2;
 
-    const newElements = elements.map((el) => {
+    const newElements = elementsRef.current.map((el) => {
       if (!ids.includes(el.id)) return el;
       switch (direction) {
         case "left":
@@ -6785,8 +6809,8 @@ const Workspace: React.FC = () => {
           return el;
       }
     });
-    setElements(newElements);
-    saveToHistory(newElements, markers);
+    setElementsSynced(newElements);
+    saveToHistory(newElements, markersRef.current);
   };
 
   const distributeSelectedElements = (
@@ -6794,7 +6818,7 @@ const Workspace: React.FC = () => {
   ) => {
     const ids = selectedElementIds.length > 1 ? selectedElementIds : [];
     if (ids.length < 2) return;
-    const els = elements.filter((el) => ids.includes(el.id));
+    const els = elementsRef.current.filter((el) => ids.includes(el.id));
 
     if (direction === "auto") {
       const count = els.length;
@@ -6805,7 +6829,7 @@ const Workspace: React.FC = () => {
       const maxH = Math.max(...sorted.map((e) => e.height));
       const startX = sorted[0].x;
       const startY = sorted[0].y;
-      const newElements = elements.map((el) => {
+      const newElements = elementsRef.current.map((el) => {
         const idx = sorted.findIndex((s) => s.id === el.id);
         if (idx === -1) return el;
         const col = idx % cols;
@@ -6816,8 +6840,8 @@ const Workspace: React.FC = () => {
           y: startY + row * (maxH + gap),
         };
       });
-      setElements(newElements);
-      saveToHistory(newElements, markers);
+      setElementsSynced(newElements);
+      saveToHistory(newElements, markersRef.current);
       return;
     }
 
@@ -6835,11 +6859,11 @@ const Workspace: React.FC = () => {
         posMap[el.id] = curX;
         curX += el.width + gap;
       }
-      const newElements = elements.map((el) =>
+      const newElements = elementsRef.current.map((el) =>
         posMap[el.id] !== undefined ? { ...el, x: posMap[el.id] } : el,
       );
-      setElements(newElements);
-      saveToHistory(newElements, markers);
+      setElementsSynced(newElements);
+      saveToHistory(newElements, markersRef.current);
     } else {
       const sorted = [...els].sort((a, b) => a.y - b.y);
       const totalHeight = sorted.reduce((sum, el) => sum + el.height, 0);
@@ -6854,11 +6878,11 @@ const Workspace: React.FC = () => {
         posMap[el.id] = curY;
         curY += el.height + gap;
       }
-      const newElements = elements.map((el) =>
+      const newElements = elementsRef.current.map((el) =>
         posMap[el.id] !== undefined ? { ...el, y: posMap[el.id] } : el,
       );
-      setElements(newElements);
-      saveToHistory(newElements, markers);
+      setElementsSynced(newElements);
+      saveToHistory(newElements, markersRef.current);
     }
   };
 
@@ -6866,9 +6890,9 @@ const Workspace: React.FC = () => {
   const handleGroupSelected = () => {
     if (selectedElementIds.length < 2) return;
     const ids = [...selectedElementIds];
-    saveToHistory(elements, markers);
+    saveToHistory(elementsRef.current, markersRef.current);
     const groupId = `group-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const targets = elements.filter((el) => ids.includes(el.id));
+    const targets = elementsRef.current.filter((el) => ids.includes(el.id));
     const minX = Math.min(...targets.map((el) => el.x));
     const minY = Math.min(...targets.map((el) => el.y));
     const maxX = Math.max(...targets.map((el) => el.x + el.width));
@@ -6887,7 +6911,7 @@ const Workspace: React.FC = () => {
         zIndex: t.zIndex,
       };
     }
-    const newElements = elements.map((el) =>
+    const newElements = elementsRef.current.map((el) =>
       ids.includes(el.id) ? { ...el, groupId } : el,
     );
     const groupEl: CanvasElement = {
@@ -6902,7 +6926,7 @@ const Workspace: React.FC = () => {
       isCollapsed: false,
       originalChildData,
     };
-    setElements([...newElements, groupEl]);
+    setElementsSynced([...newElements, groupEl]);
     setSelectedElementId(groupId);
     setSelectedElementIds([groupId]);
   };
@@ -6910,9 +6934,9 @@ const Workspace: React.FC = () => {
   const handleMergeSelected = () => {
     if (selectedElementIds.length < 2) return;
     const ids = [...selectedElementIds];
-    saveToHistory(elements, markers);
+    saveToHistory(elementsRef.current, markersRef.current);
     const groupId = `group-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const targets = elements.filter((el) => ids.includes(el.id));
+    const targets = elementsRef.current.filter((el) => ids.includes(el.id));
     const minX = Math.min(...targets.map((el) => el.x));
     const minY = Math.min(...targets.map((el) => el.y));
     const maxX = Math.max(...targets.map((el) => el.x + el.width));
@@ -6931,7 +6955,7 @@ const Workspace: React.FC = () => {
         zIndex: t.zIndex,
       };
     }
-    const newElements = elements.map((el) =>
+    const newElements = elementsRef.current.map((el) =>
       ids.includes(el.id) ? { ...el, groupId } : el,
     );
     const groupEl: CanvasElement = {
@@ -6946,18 +6970,18 @@ const Workspace: React.FC = () => {
       isCollapsed: true,
       originalChildData,
     };
-    setElements([...newElements, groupEl]);
+    setElementsSynced([...newElements, groupEl]);
     setSelectedElementId(groupId);
     setSelectedElementIds([groupId]);
   };
 
   const handleUngroupSelected = () => {
-    const el = elements.find((e) => e.id === selectedElementId);
+    const el = elementsRef.current.find((e) => e.id === selectedElementId);
     if (!el || el.type !== "group") return;
-    saveToHistory(elements, markers);
+    saveToHistory(elementsRef.current, markersRef.current);
     const childIds = el.children || [];
     const originalData = el.originalChildData || {};
-    const newElements = elements
+    const newElements = elementsRef.current
       .filter((e) => e.id !== el.id)
       .map((e) => {
         if (!childIds.includes(e.id)) return e;
@@ -6974,7 +6998,7 @@ const Workspace: React.FC = () => {
             }
           : { ...e, groupId: undefined };
       });
-    setElements(newElements);
+    setElementsSynced(newElements);
     setSelectedElementIds(childIds);
     setSelectedElementId(childIds[0] || null);
   };
