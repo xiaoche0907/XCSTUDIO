@@ -479,14 +479,26 @@ export const generateVideo = async (
 
     // --- Model Normalization for Yunwu AI ---
     let effectiveModel = model;
-    if (model === 'veo_3_1-fast' || model === 'veo-3.1-fast-generate-preview') {
-        effectiveModel = 'veo-3.1-fast-generate-preview';
-    } else if (model === 'veo-3.1-generate-preview') {
-        effectiveModel = 'veo-3.1-generate-preview';
-    } else if (model === 'sora-2') {
-        effectiveModel = 'sora-2';
-    } else if (model === 'kling-3.0') {
-        effectiveModel = 'kling-v1-5';
+    if (isYunwu) {
+        if (model === 'veo-3.1-fast-generate-preview') {
+            effectiveModel = 'veo-3.1-fast-generate-preview';
+        } else if (model === 'veo-3.1-generate-preview') {
+            effectiveModel = 'veo-3.1-generate-preview';
+        } else if (model === 'sora-2') {
+            effectiveModel = 'sora-2-all'; // Yunwu sora-2 with 10s/15s support
+        } else if (model === 'kling-3.0') {
+            effectiveModel = 'kling-v1-5'; // Kling mapping
+        }
+    } else {
+        if (model === 'veo_3_1-fast' || model === 'veo-3.1-fast-generate-preview') {
+            effectiveModel = 'veo-3.1-fast-generate-preview';
+        } else if (model === 'veo-3.1-generate-preview') {
+            effectiveModel = 'veo-3.1-generate-preview';
+        } else if (model === 'sora-2') {
+            effectiveModel = 'sora-2';
+        } else if (model === 'kling-3.0') {
+            effectiveModel = 'kling-v1-5';
+        }
     }
 
     const qualitySuffix = ", cinematic lighting, highly detailed, photorealistic, 4k, smooth motion, professional color grading";
@@ -522,7 +534,8 @@ export const generateVideo = async (
                     }
 
                     // Attempt fetching OpenAI standard video endpoint
-                    let res = await fetch(`${baseUrl}/v1/videos`, {
+                    // Use /v1/video/create as priority per user guidance
+                    let res = await fetch(`${baseUrl}/v1/video/create`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -530,6 +543,18 @@ export const generateVideo = async (
                         },
                         body: JSON.stringify(payload)
                     });
+
+                    if (!res.ok) {
+                        // Fallback to /v1/videos if /v1/video/create is not supported
+                        res = await fetch(`${baseUrl}/v1/videos`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${apiKey}`
+                            },
+                            body: JSON.stringify(payload)
+                        });
+                    }
 
                     if (!res.ok) {
                         const errText = await res.text();
@@ -544,32 +569,43 @@ export const generateVideo = async (
                         let maxPolls = 60; // 5 mins max
                         while (maxPolls > 0) {
                             await wait(5000); // Poll every 5 seconds
-                            const pollRes = await fetch(`${baseUrl}/v1/videos/tasks/${taskId}`, {
-                                headers: { 'Authorization': `Bearer ${apiKey}` }
-                            });
-                            if (pollRes.ok) {
-                                const pollData = await pollRes.json();
-                                if (pollData.url || pollData.video_url || (pollData.data && pollData.data[0]?.url)) {
-                                    data = pollData; // done
-                                    break;
-                                }
-                                if (pollData.status === 'failed' || pollData.status === 'error') {
-                                    throw new Error(`Video Generation Failed: ${JSON.stringify(pollData)}`);
-                                }
-                                // else assume processing and continue loop
-                            } else {
-                                // sometimes polling endpoint is just /v1/videos/{id}
-                                const altPollRes = await fetch(`${baseUrl}/v1/videos/${taskId}`, {
-                                    headers: { 'Authorization': `Bearer ${apiKey}` }
-                                });
-                                if (altPollRes.ok) {
-                                    const altPollData = await altPollRes.json();
-                                    if (altPollData.url || altPollData.video_url || (altPollData.data && altPollData.data[0]?.url)) {
-                                        data = altPollData;
+
+                            // Try multiple polling endpoints commonly used by proxies
+                            const pollEndpoints = [
+                                `${baseUrl}/v1/video/create/${taskId}`,
+                                `${baseUrl}/v1/videos/tasks/${taskId}`,
+                                `${baseUrl}/v1/videos/${taskId}`
+                            ];
+
+                            let pollSuccess = false;
+                            for (const endpoint of pollEndpoints) {
+                                try {
+                                    const pollRes = await fetch(endpoint, {
+                                        headers: { 'Authorization': `Bearer ${apiKey}` }
+                                    });
+                                    if (pollRes.ok) {
+                                        const pollData = await pollRes.json();
+                                        if (pollData.url || pollData.video_url || (pollData.data && pollData.data[0]?.url)) {
+                                            data = pollData; // done
+                                            pollSuccess = true;
+                                            break;
+                                        }
+                                        if (pollData.status === 'failed' || pollData.status === 'error') {
+                                            throw new Error(`Video Generation Failed: ${JSON.stringify(pollData)}`);
+                                        }
+                                        // Still processing
+                                        pollSuccess = true;
                                         break;
                                     }
+                                } catch (e) {
+                                    // ignore and try next endpoint
                                 }
                             }
+
+                            if (pollSuccess && (data.url || data.video_url || (data.data && data.data[0]?.url))) {
+                                break;
+                            }
+
                             maxPolls--;
                         }
                     }
@@ -636,19 +672,8 @@ export const generateVideo = async (
         };
 
     } catch (e: any) {
-        console.warn("Veo Generation Failed. Falling back to Image.", e);
-
-        // --- Fallback: Generate Image ---
-        // CRITICAL FIX: Pass the input image to the fallback generator so it respects the upstream content!
-        try {
-            const fallbackPrompt = "Cinematic movie still, " + enhancedPrompt;
-            const inputImages = finalInputImageBase64 ? [finalInputImageBase64] : [];
-
-            const imgs = await generateImageFromText(fallbackPrompt, 'gemini-2.5-flash-image', inputImages, { aspectRatio: options.aspectRatio });
-            return { uri: imgs[0], isFallbackImage: true };
-        } catch (imgErr) {
-            throw new Error("Video generation failed and Image fallback also failed: " + getErrorMessage(e));
-        }
+        console.error("Video Generation Error:", e);
+        throw e; // No more fallback to image
     }
 };
 

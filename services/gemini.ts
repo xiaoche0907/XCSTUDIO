@@ -514,9 +514,15 @@ const normalizeVideoModelId = (modelId: string): string => {
 
     if (normalized === 'Veo 3.1 Fast') return VEO_FAST_MODEL;
     if (normalized === 'Veo 3.1' || normalized === 'Veo 3.1 Pro') return VEO_PRO_MODEL;
+    if (normalized === 'Sora 2') return 'sora-2';
+    if (normalized === 'Sora 2 Pro') return 'sora-2';
+    if (normalized === 'Kling Pro') return 'kling-v1-5';
+    if (normalized === 'Kling 3.0') return 'kling-v1-5';
 
     const lower = normalized.toLowerCase();
     if (LEGACY_VIDEO_MODEL_MAP[lower]) return LEGACY_VIDEO_MODEL_MAP[lower];
+    if (lower === 'sora-2') return 'sora-2';
+    if (lower === 'kling-3.0' || lower === 'kling pro') return 'kling-v1-5';
 
     return normalized;
 };
@@ -1309,7 +1315,7 @@ export const generateImage = async (config: ImageGenerationConfig): Promise<stri
 
 export interface VideoGenerationConfig {
     prompt: string;
-    model: 'Veo 3.1' | 'Veo 3.1 Pro' | 'Veo 3.1 Fast';
+    model: string;
     aspectRatio: string;
     startFrame?: string; // base64
     endFrame?: string; // base64
@@ -1332,9 +1338,7 @@ export const generateVideo = async (config: VideoGenerationConfig): Promise<stri
         }
 
         // 1. Determine the target model ID
-        let targetModelId = '';
-        if (config.model === 'Veo 3.1' || config.model === 'Veo 3.1 Pro') targetModelId = VEO_PRO_MODEL;
-        else if (config.model === 'Veo 3.1 Fast') targetModelId = VEO_FAST_MODEL;
+        let targetModelId = normalizeVideoModelId(config.model || '');
 
         if (!targetModelId) {
             const candidates = getNormalizedSelectedVideoModels();

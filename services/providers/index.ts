@@ -30,17 +30,25 @@ videoProviders.forEach((provider, providerId) => registerModels(modelToVideoProv
 
 // Video model aliases for compatibility with old settings/model ids
 const VIDEO_MODEL_ALIASES: Record<string, string> = {
-  'Auto': 'Veo 3.1 Fast',
+  'auto': 'Veo 3.1 Fast',
   'veo-3.1-fast': 'Veo 3.1 Fast',
+  'veo_3_1-fast': 'Veo 3.1 Fast',
   'veo-3.1-fast-generate-preview': 'Veo 3.1 Fast',
   'veo-3.1': 'Veo 3.1',
   'veo-3.1-generate-preview': 'Veo 3.1',
   'veo3.1-4k': 'Veo 3.1',
   'veo3.1-c': 'Veo 3.1',
+  'veo 3.1 fast': 'Veo 3.1 Fast',
+  'veo 3.1 pro': 'Veo 3.1',
+  'sora-2': 'Sora 2',
+  'kling-3.0': 'Kling Pro',
+  'kling 3.0': 'Kling Pro',
 };
 
 const resolveVideoModel = (model: string): string => {
-  return VIDEO_MODEL_ALIASES[model] || model;
+  const normalized = (model || '').trim();
+  if (!normalized) return 'Veo 3.1 Fast';
+  return VIDEO_MODEL_ALIASES[normalized.toLowerCase()] || normalized;
 };
 
 const resolveImageModel = (model: string): string => {
