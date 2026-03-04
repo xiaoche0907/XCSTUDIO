@@ -15,6 +15,7 @@ import { executeSkill, AVAILABLE_SKILLS } from "../skills";
 import { errorHandler, ErrorType, AppError } from "../../utils/error-handler";
 import { buildEcommerceProposals } from "./shared/ecommerce-variants";
 import { useAgentStore } from "../../stores/agent.store";
+import { collectReferenceCandidates } from "./utils/reference-images";
 
 // 带指数退避的重试工具（用于 analyzeAndPlan 等内部调用）
 const retryAsync = async <T>(
@@ -116,6 +117,15 @@ const SKILL_TIMEOUTS: Record<string, number> = {
   export: 30_000,
 };
 const DEFAULT_SKILL_TIMEOUT = 120_000;
+const DEFAULT_MAX_REFERENCE_IMAGES = 8;
+const parsedMaxReferenceImages = Number.parseInt(
+  String((import.meta as any).env?.VITE_MAX_REFERENCE_IMAGES ?? DEFAULT_MAX_REFERENCE_IMAGES),
+  10,
+);
+const MAX_REFERENCE_IMAGES =
+  Number.isFinite(parsedMaxReferenceImages) && parsedMaxReferenceImages > 0
+    ? parsedMaxReferenceImages
+    : DEFAULT_MAX_REFERENCE_IMAGES;
 
 const IMAGE_TOOL_PARAMS_SCHEMA: ImageParamsSchema = {
   type: Type.OBJECT,
@@ -1535,11 +1545,67 @@ ${productSection}${quantitySection}${multiImageSection}${forcedToolSection}${mul
       call.skillName === "generateVideo" ||
       call.skillName === "smartEdit"
     ) {
+      if (
+        call.skillName === "generateImage" ||
+        call.skillName === "generateVideo"
+      ) {
+        const resolvedRefs = await this.resolveReferenceImages(task, call.params);
+        const expectedRefCount = Math.min(
+          resolvedRefs.sourceCount,
+          MAX_REFERENCE_IMAGES,
+        );
+
+        if (resolvedRefs.references.length > 0) {
+          const callRefCount = Array.isArray(call.params.referenceImages)
+            ? call.params.referenceImages.length
+            : 0;
+          if (callRefCount !== expectedRefCount) {
+            console.warn(
+              `[${this.agentInfo.id}] Auto-repairing referenceImages for ${call.skillName}: expected=${expectedRefCount}, actual=${callRefCount}`,
+            );
+          }
+
+          call.params.referenceImages = resolvedRefs.references;
+
+          const firstRef = resolvedRefs.references[0];
+          if (!call.params.referenceImage) call.params.referenceImage = firstRef;
+          if (!call.params.reference_image_url)
+            call.params.reference_image_url = firstRef;
+          if (!call.params.init_image) call.params.init_image = firstRef;
+
+          if (resolvedRefs.truncated) {
+            console.warn(
+              `[${this.agentInfo.id}] referenceImages truncated to ${MAX_REFERENCE_IMAGES}`,
+            );
+            if (typeof call.params.prompt === "string" && call.params.prompt.trim()) {
+              call.params.prompt = `${call.params.prompt}\n\nReference note: ${resolvedRefs.sourceCount} reference images were provided. Due to model input limits, ${resolvedRefs.references.length} representative references were injected. Keep composition, color language, and subject traits consistent with all provided references.`;
+            }
+          }
+        }
+
+        task.input.metadata = task.input.metadata || {};
+        task.input.metadata.referenceInjection = {
+          ...(task.input.metadata.referenceInjection || {}),
+          maxReferenceImages: MAX_REFERENCE_IMAGES,
+          uploaded_total: task.input.uploadedAttachments?.length || 0,
+          source_total: resolvedRefs.sourceCount,
+          injected_total: resolvedRefs.references.length,
+          truncated: resolvedRefs.truncated,
+          omitted_total: resolvedRefs.omittedCount,
+        };
+        console.info(
+          `[${this.agentInfo.id}] reference injection stats`,
+          task.input.metadata.referenceInjection,
+        );
+      }
+
       const paramKey =
         call.skillName === "smartEdit" ? "sourceUrl" : "referenceImage";
 
       if (
         call.skillName === "generateImage" &&
+        (!Array.isArray(call.params.referenceImages) ||
+          call.params.referenceImages.length === 0) &&
         !call.params[paramKey] &&
         task.input.attachments &&
         task.input.attachments.length > 0
@@ -1608,6 +1674,50 @@ ${productSection}${quantitySection}${multiImageSection}${forcedToolSection}${mul
         ),
       ),
     ]);
+  }
+
+  private async resolveReferenceImages(
+    task: AgentTask,
+    params: Record<string, any>,
+  ): Promise<{
+    references: string[];
+    sourceCount: number;
+    truncated: boolean;
+    omittedCount: number;
+  }> {
+    const { limitedCandidates, sourceCount, truncated } =
+      collectReferenceCandidates(params, task.input, MAX_REFERENCE_IMAGES);
+    const references: string[] = [];
+
+    for (const item of limitedCandidates) {
+      const resolved = await this.resolveReferenceItem(task, item);
+      if (resolved) references.push(resolved);
+    }
+
+    return {
+      references,
+      sourceCount,
+      truncated,
+      omittedCount: Math.max(0, sourceCount - references.length),
+    };
+  }
+
+  private async resolveReferenceItem(
+    task: AgentTask,
+    value: string,
+  ): Promise<string | null> {
+    if (!value.startsWith("ATTACHMENT_")) return value;
+
+    const idx = Number.parseInt(value.split("_")[1] || "", 10);
+    const file = task.input.attachments?.[idx];
+    if (!file) return null;
+
+    return new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve((reader.result as string) || "");
+      reader.onerror = () => resolve("");
+      reader.readAsDataURL(file);
+    }).then((v) => (v ? v : null));
   }
 
   /**

@@ -64,9 +64,20 @@ async function uploadToImgbbWithKey(file: File, key: string): Promise<string> {
     throw new Error(message);
   }
 
-  const resultUrl = payload?.data?.url || payload?.data?.display_url;
+  const resultUrl =
+    payload?.data?.image?.url ||
+    payload?.data?.url ||
+    payload?.data?.display_url;
   if (!resultUrl) {
     throw new Error('ImgBB 返回成功但未包含可用图片地址');
+  }
+
+  if (/^https?:\/\/ibb\.co\//i.test(resultUrl)) {
+    const directUrl = payload?.data?.image?.url || payload?.data?.display_url;
+    if (directUrl && /^https?:\/\//i.test(directUrl) && !/^https?:\/\/ibb\.co\//i.test(directUrl)) {
+      return directUrl;
+    }
+    throw new Error('ImgBB 返回了页面链接而非图片直链');
   }
 
   return resultUrl;

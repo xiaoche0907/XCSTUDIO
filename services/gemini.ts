@@ -487,7 +487,7 @@ const getVideoBaseUrl = () => {
 
 // Models
 const PRO_MODEL = 'gemini-3-pro-preview';
-const FLASH_MODEL = 'gemini-3-flash-preview';
+const FLASH_MODEL = 'gemini-3.1-flash-lite-preview';
 const THINKING_MODEL = 'gemini-3.1-pro-preview';
 // Image Gen models
 const IMAGE_PRO_MODEL = 'gemini-3-pro-image-preview';
@@ -1076,6 +1076,38 @@ export const extractTextFromImage = async (imageBase64: string): Promise<string[
     } catch (error) {
         console.error("Extract Text Error:", error);
         return [];
+    }
+};
+
+export const analyzeProductSwapScene = async (imageBase64: string): Promise<string> => {
+    try {
+        const matches = imageBase64.match(/^data:(.+);base64,(.+)$/);
+        if (!matches) throw new Error("Invalid base64 image");
+
+        const response = await retryWithBackoff<GenerateContentResponse>(() => getClient().models.generateContent({
+            model: "gemini-3.1-flash-lite-preview",
+            contents: {
+                parts: [
+                    {
+                        inlineData: {
+                            mimeType: matches[1],
+                            data: matches[2]
+                        }
+                    },
+                    {
+                        text: "分析场景：识别旧产品位置、光源方向、环境纹理等。以详细自然语言描述场景，为后续AI图像生成(产品替换)准备描述参考"
+                    }
+                ]
+            }
+        }));
+
+        if (response.text) {
+            return response.text;
+        }
+        return "";
+    } catch (error) {
+        console.error("Analyze Scene Error:", error);
+        return "";
     }
 };
 

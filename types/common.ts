@@ -50,7 +50,7 @@ export interface CanvasElement {
   genFirstLastMode?: 'startEnd' | 'multiRef'; // Toggle for "Start/End Frame" vs "Multi Ref" in Veo 3.1
 
   isGenerating?: boolean;
-  generatingType?: 'upscale' | 'vector' | 'remove-bg' | 'gen-image' | 'gen-video';
+  generatingType?: 'upscale' | 'vector' | 'remove-bg' | 'gen-image' | 'gen-video' | 'product-swap';
 
   x: number;
   y: number;

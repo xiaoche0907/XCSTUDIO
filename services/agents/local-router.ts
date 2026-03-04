@@ -5,6 +5,7 @@
  */
 
 import { AgentType } from '../../types/agent.types';
+import { detectOptimizeOnlyIntent } from './prompt-optimizer/intent';
 
 interface RouteRule {
   keywords: string[];
@@ -52,6 +53,10 @@ export function isEditRequest(message: string): boolean {
  * @returns 匹配到的智能体类型，未匹配返回 null
  */
 export function localPreRoute(message: string): AgentType | null {
+  if (detectOptimizeOnlyIntent(message)) {
+    return 'prompt-optimizer';
+  }
+
   // 修改/编辑类请求需要更精确的意图分析，不走本地路由
   if (isEditRequest(message)) {
     return null;

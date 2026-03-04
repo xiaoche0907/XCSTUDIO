@@ -7,6 +7,7 @@ import { posterAgent } from './agents/poster.agent';
 import { packageAgent } from './agents/package.agent';
 import { motionAgent } from './agents/motion.agent';
 import { campaignAgent } from './agents/campaign.agent';
+import { promptOptimizerAgent } from './agents/prompt-optimizer.agent';
 
 export const AGENT_REGISTRY: Record<AgentType, EnhancedBaseAgent> = {
   coco: cocoAgent,
@@ -15,7 +16,8 @@ export const AGENT_REGISTRY: Record<AgentType, EnhancedBaseAgent> = {
   poster: posterAgent,
   package: packageAgent,
   motion: motionAgent,
-  campaign: campaignAgent
+  campaign: campaignAgent,
+  'prompt-optimizer': promptOptimizerAgent,
 };
 
 export function getAgentInfo(agentId: AgentType): AgentInfo {

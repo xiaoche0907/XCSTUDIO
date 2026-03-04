@@ -1,7 +1,15 @@
 export type { ProjectContext } from './common';
 import type { ProjectContext } from './common';
 
-export type AgentType = 'coco' | 'vireo' | 'cameron' | 'poster' | 'package' | 'motion' | 'campaign';
+export type AgentType =
+  | 'coco'
+  | 'vireo'
+  | 'cameron'
+  | 'poster'
+  | 'package'
+  | 'motion'
+  | 'campaign'
+  | 'prompt-optimizer';
 
 export interface AgentInfo {
   id: AgentType;

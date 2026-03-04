@@ -103,6 +103,7 @@ import {
   generateVideo,
   extractTextFromImage,
   analyzeImageRegion,
+  analyzeProductSwapScene,
 } from "../services/gemini";
 import {
   ChatMessage,
@@ -141,6 +142,14 @@ import { exportSkill } from "../services/skills/export.skill";
 import { executeSkill } from "../services/skills";
 import { useClothingStudioChatStore, useClothingState } from "../stores/clothingStudioChat.store";
 import { uploadImage } from "../utils/uploader";
+import { useImageHostStore } from "../stores/imageHost.store";
+import {
+  extractWebPage,
+  pickUsableReferenceImages,
+  rehostImageUrl,
+  runResearchSearch,
+  type SearchResponse,
+} from "../services/research/search.service";
 import {
   addTopicMemoryItem,
   extractConstraintHints,
@@ -901,6 +910,9 @@ const Workspace: React.FC = () => {
   // 创作模式状态: 'agent' | 'image' | 'video'
   type CreationMode = "agent" | "image" | "video";
   const [creationMode, setCreationMode] = useState<CreationMode>("agent");
+  const [researchMode] = useState<"off" | "images" | "web+images">(
+    "web+images",
+  );
   const [showModeSelector, setShowModeSelector] = useState(false);
 
   // 图像生成器相关状态 (from store)
@@ -962,6 +974,13 @@ const Workspace: React.FC = () => {
     width: number;
     height: number;
   } | null>(null);
+
+  // Product Swap States
+  const [showProductSwapPanel, setShowProductSwapPanel] = useState(false);
+  const [productSwapImages, setProductSwapImages] = useState<string[]>([]);
+  const [productSwapRes, setProductSwapRes] = useState<"1K" | "2K" | "4K">("2K");
+  const [showProductSwapResDropdown, setShowProductSwapResDropdown] = useState(false);
+
   const clothingState = useClothingState();
   const clothingActions = useClothingStudioChatStore((s) => s.actions);
   const [clothingWorkflowError, setClothingWorkflowError] = useState<
@@ -1696,29 +1715,7 @@ const Workspace: React.FC = () => {
         },
       });
       if (result) {
-        const img = new Image();
-        img.src = result;
-        img.onload = () => {
-          let nextElements: CanvasElement[] = [];
-          setElements((prev) => {
-            nextElements = prev.map((e) =>
-              e.id === newId
-                ? {
-                    ...e,
-                    isGenerating: false,
-                    url: result,
-                    width: targetSize.width,
-                    height: targetSize.height,
-                  }
-                : e,
-            );
-            elementsRef.current = nextElements;
-            return nextElements;
-          });
-          if (nextElements.length > 0) {
-            saveToHistory(nextElements, markersRef.current);
-          }
-        };
+        await applyGeneratedImageToElement(newId, result, true);
       } else {
         setElements((prev) => {
           const next = prev.filter((e) => e.id !== newId);
@@ -2100,8 +2097,14 @@ const Workspace: React.FC = () => {
         }
 
         if (attachments.length > 0) {
+          const hostProvider = useImageHostStore.getState().selectedProvider;
+          if (hostProvider === "none") {
+            throw new Error("请先在设置中启用图床（如 ImgBB），再上传产品/参考图");
+          }
+
           const uploaded: Array<{ id: string; url: string; name?: string }> =
             [];
+          const failedNames: string[] = [];
           for (const file of attachments) {
             try {
               const url = await uploadImage(file);
@@ -2114,22 +2117,18 @@ const Workspace: React.FC = () => {
                 const role = clothingState.step === "WAIT_PRODUCT" ? "product" : "reference";
                 await saveTopicAsset(topicId, role, { url, mime: file.type || "image/png" });
               }
-            } catch {
-              const fallback = await new Promise<string>((resolve) => {
-                const r = new FileReader();
-                r.onloadend = () => resolve(r.result as string);
-                r.readAsDataURL(file);
-              });
-              uploaded.push({
-                id: `up-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-                url: fallback,
-                name: file.name,
-              });
-              if (topicId) {
-                const role = clothingState.step === "WAIT_PRODUCT" ? "product" : "reference";
-                await saveTopicAsset(topicId, role, { url: fallback, mime: file.type || "image/png" });
-              }
+            } catch (uploadErr: any) {
+              failedNames.push(file.name || "未命名文件");
+              console.error("[ClothingWorkflow] 上传失败", uploadErr);
             }
+          }
+
+          if (uploaded.length !== attachments.length) {
+            const detail =
+              failedNames.length > 0
+                ? ` 失败文件: ${failedNames.join(", ")}`
+                : "";
+            throw new Error(`图片上传失败，请重试或检查图床配置。${detail}`);
           }
 
           if (clothingState.step === "WAIT_PRODUCT") {
@@ -2329,6 +2328,78 @@ const Workspace: React.FC = () => {
     });
 
     try {
+      let researchPayload: SearchResponse | null = null;
+      let researchReferenceImageUrls: string[] = [];
+      let researchWebPages: Array<{
+        title: string;
+        url: string;
+        snippet?: string;
+        siteName?: string;
+      }> = [];
+
+      const shouldRunResearch =
+        researchMode !== "off" &&
+        !skillData &&
+        /海报|宣传图|封面|短视频|视频|营销|campaign|poster|风格|地标|路线|活动/i.test(
+          text,
+        );
+
+      if (shouldRunResearch) {
+        try {
+          researchPayload = await runResearchSearch(text, researchMode);
+          const rawImageUrls = pickUsableReferenceImages(researchPayload.images, 8);
+          if (rawImageUrls.length > 0) {
+            const rehosted = await Promise.allSettled(
+              rawImageUrls.map((url) => rehostImageUrl(url)),
+            );
+            researchReferenceImageUrls = rehosted
+              .map((item, index) => {
+                if (item.status === "fulfilled" && item.value?.hostedUrl) {
+                  return item.value.hostedUrl;
+                }
+                return rawImageUrls[index];
+              })
+              .filter((url) => /^https?:\/\//i.test(url));
+          }
+
+          const webCandidates = (researchPayload.web || []).slice(0, 8);
+          const extractedWebs = await Promise.allSettled(
+            webCandidates.map(async (item) => {
+              const extracted = await extractWebPage(item.url);
+              return {
+                title: extracted.title || item.title,
+                url: item.url,
+                snippet: extracted.excerpt || item.snippet,
+                siteName: item.siteName,
+              };
+            }),
+          );
+
+          researchWebPages = extractedWebs.map((item, index) => {
+            if (item.status === "fulfilled") return item.value;
+            const fallback = webCandidates[index];
+            return {
+              title: fallback?.title || "",
+              url: fallback?.url || "",
+              snippet: fallback?.snippet,
+              siteName: fallback?.siteName,
+            };
+          }).filter((item) => /^https?:\/\//i.test(item.url));
+
+          researchWebPages = researchWebPages.map((item) => ({
+            title: item.title,
+            url: item.url,
+            snippet: item.snippet,
+            siteName: item.siteName,
+          }));
+        } catch (researchError) {
+          console.warn(
+            "[Workspace] research search failed, fallback to direct generation",
+            researchError,
+          );
+        }
+      }
+
       const requestMetadata = {
         topicId: effectiveTopicId,
         enableWebSearch: isWeb,
@@ -2336,6 +2407,33 @@ const Workspace: React.FC = () => {
         preferredAspectRatio:
           creationMode === "video" ? videoGenRatio : imageGenRatio,
         skillData,
+        multimodalContext: {
+          referenceImageUrls: researchReferenceImageUrls,
+          referenceWebPages: researchWebPages,
+          research: researchPayload
+            ? {
+                requestId: researchPayload.requestId,
+                query: researchPayload.query,
+                mode: researchPayload.mode,
+                provider: researchPayload.provider,
+                suggestedQueries: researchPayload.hints?.suggestedQueries || [],
+                reportBrief:
+                  researchWebPages.length > 0
+                    ? `已检索 ${researchWebPages.length} 条网页资料与 ${researchReferenceImageUrls.length} 张参考图。`
+                    : `已检索 ${researchReferenceImageUrls.length} 张参考图。`,
+                reportFull: (researchWebPages || [])
+                  .map(
+                    (w, idx) =>
+                      `${idx + 1}. ${w.title}\n${w.url}\n${w.snippet || ""}`,
+                  )
+                  .join("\n\n"),
+                citations: researchWebPages.map((w) => ({
+                  title: w.title,
+                  url: w.url,
+                })),
+              }
+            : undefined,
+        },
       };
 
       // 4. 调用 Orchestrator 处理任务
@@ -2922,8 +3020,9 @@ const Workspace: React.FC = () => {
     if (!selectedElementId) return;
     const el = elements.find((e) => e.id === selectedElementId);
     if (!el || !el.url) return;
+    const sourceUrl = getElementSourceUrl(el) || el.url;
     const link = document.createElement("a");
-    link.href = el.url;
+    link.href = sourceUrl;
     link.download = `xc-image-${Date.now()}.png`;
     document.body.appendChild(link);
     link.click();
@@ -3046,6 +3145,69 @@ const Workspace: React.FC = () => {
     } catch (e) {
       console.error(e);
       setElementGeneratingState(selectedElementId, false);
+    }
+  };
+
+  const buildProductSwapPrompt = (analysis: string): string => {
+    return `You are a world-class commercial product photography director. Follow the 8-phase execution pipeline strictly to perform a photorealistic product swap.
+
+[SCENE ANALYSIS]
+${analysis}
+
+[REQUIREMENTS]
+- Phase 1-4: Source analysis & physical lighting matching
+- Phase 5: Precision Swap (Erase original product with Anti-Ghosting, insert new product)
+- Phase 6-8: Edge blending, material fidelity, and final 8k quality check.
+- Maintain product color accuracy. Ensure seamless background inpainting.
+- Output photorealistic 8k composition.`;
+  };
+
+  const handleProductSwap = async () => {
+    if (!selectedElementId || productSwapImages.length === 0) return;
+    const el = elementsRef.current.find((e) => e.id === selectedElementId);
+    if (!el || !el.url) return;
+
+    setShowProductSwapPanel(false);
+
+    const sourceSize = await loadElementSourceSize(el);
+    const targetAspectRatio = getNearestAspectRatio(sourceSize.width, sourceSize.height);
+
+    const newId = `product-swap-${Date.now()}`;
+    const newEl: CanvasElement = {
+      ...el,
+      id: newId,
+      x: el.x + el.width + 20,
+      isGenerating: true,
+      generatingType: "product-swap",
+      url: undefined,
+      zIndex: elements.length + 10,
+    };
+    setElements((prev) => [...prev, newEl]);
+    setSelectedElementId(newId);
+
+    try {
+      const sceneBase64 = await urlToBase64(el.url);
+      const analysisText = await analyzeProductSwapScene(sceneBase64);
+      const prompt = buildProductSwapPrompt(analysisText);
+
+      const allImages = [sceneBase64, ...productSwapImages];
+
+      const result = await generateImage({
+        prompt: prompt,
+        model: 'Nano Banana Pro',
+        aspectRatio: targetAspectRatio,
+        imageSize: productSwapRes === '1K' ? '1K' : productSwapRes === '2K' ? '2K' : '4K',
+        referenceImages: allImages,
+      });
+
+      if (result) {
+        await applyGeneratedImageToElement(newId, result, true);
+      } else {
+        throw new Error("No result generated");
+      }
+    } catch (e) {
+      console.error("Product Swap Failed:", e);
+      setElements((prev) => prev.filter((e) => e.id !== newId));
     }
   };
 
@@ -6062,15 +6224,137 @@ const Workspace: React.FC = () => {
               )}
             </button>
 
-            {/* Mockup */}
-            <button
-              className={`w-full flex items-center gap-2.5 px-2 py-1.5 text-gray-600 hover:bg-gray-50 rounded-[10px] transition-colors ${toolbarExpanded ? "" : "justify-center"}`}
-            >
-              <Shirt size={16} strokeWidth={2} className="flex-shrink-0" />
-              {toolbarExpanded && (
-                <span className="text-[13px] whitespace-nowrap">Mockup</span>
+            {/* 产品替换 */}
+            <div className="relative">
+              <button
+                onClick={() => setShowProductSwapPanel(!showProductSwapPanel)}
+                className={`w-full flex items-center gap-2.5 px-2 py-1.5 text-gray-600 hover:bg-gray-50 rounded-[10px] transition-colors ${toolbarExpanded ? "" : "justify-center"}`}
+              >
+                <Shirt size={16} strokeWidth={2} className="flex-shrink-0" />
+                {toolbarExpanded && (
+                  <span className="text-[13px] whitespace-nowrap">产品替换</span>
+                )}
+              </button>
+
+              {showProductSwapPanel && (
+                <div
+                  className="absolute top-0 left-full ml-2 bg-white rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.12)] border border-gray-100 p-4 z-[70] w-72 animate-in slide-in-from-left-2 duration-200 flex flex-col gap-4"
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-bold text-gray-900">
+                      上传产品图替换
+                    </span>
+                    <button
+                      onClick={() => setShowProductSwapPanel(false)}
+                      className="text-gray-400 hover:text-black transition"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-1">
+                      上传产品细节图 (最多3张)
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {productSwapImages.map((imgUrl, i) => (
+                        <div key={i} className="relative w-16 h-16 rounded-lg overflow-hidden border border-gray-200 group">
+                          <img src={imgUrl} className="w-full h-full object-cover" />
+                          <button 
+                            onClick={() => setProductSwapImages(prev => prev.filter((_, idx) => idx !== i))}
+                            className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X size={10} />
+                          </button>
+                        </div>
+                      ))}
+                      {productSwapImages.length < 3 && (
+                        <label className="w-16 h-16 rounded-lg border-2 border-dashed border-gray-200 flex flex-col items-center justify-center text-gray-400 hover:border-blue-400 hover:text-blue-500 cursor-pointer transition">
+                          <Plus size={16} />
+                          <span className="text-[9px] mt-1">上传</span>
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            multiple
+                            className="hidden" 
+                            onChange={async (e) => {
+                              const files = Array.from(e.target.files || []);
+                              if (files.length === 0) return;
+                              const toProcess = files.slice(0, 3 - productSwapImages.length);
+                              const newImgs: string[] = [];
+                              for (let file of toProcess) {
+                                const b64 = await fileToDataUrl(file);
+                                newImgs.push(b64);
+                              }
+                              setProductSwapImages(prev => [...prev, ...newImgs]);
+                              e.target.value = '';
+                            }} 
+                          />
+                        </label>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 分辨率选择 */}
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-1">
+                      生成尺寸
+                    </span>
+                    <div className="relative">
+                      <button
+                        onClick={() =>
+                          setShowProductSwapResDropdown(!showProductSwapResDropdown)
+                        }
+                        className="w-full flex items-center justify-between px-3 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-100 transition"
+                      >
+                        <span className="font-bold">{productSwapRes}</span>
+                        <ChevronDown
+                          size={14}
+                          className={`text-gray-400 transition-transform ${showProductSwapResDropdown ? "rotate-180" : ""}`}
+                        />
+                      </button>
+
+                      {showProductSwapResDropdown && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-xl border border-gray-100 p-1 z-10 overflow-hidden">
+                          {(["1K", "2K", "4K"] as const).map((res) => (
+                            <button
+                              key={res}
+                              onClick={() => {
+                                setProductSwapRes(res);
+                                setShowProductSwapResDropdown(false);
+                              }}
+                              className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition ${productSwapRes === res ? "bg-blue-50 text-blue-600 font-bold" : "text-gray-600 hover:bg-gray-50"}`}
+                            >
+                              <span>{res}</span>
+                              {productSwapRes === res && (
+                                <Check size={14} />
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex gap-2 mt-4">
+                      <button
+                        onClick={() => setShowProductSwapPanel(false)}
+                        className="flex-1 py-2 text-xs font-bold text-gray-500 hover:bg-gray-50 rounded-xl transition border border-gray-100"
+                      >
+                        取消
+                      </button>
+                      <button
+                        onClick={handleProductSwap}
+                        disabled={productSwapImages.length === 0}
+                        className="flex-1 py-2 bg-gray-900 text-white text-xs font-bold rounded-xl hover:bg-black transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        开始替换
+                      </button>
+                    </div>
+                  </div>
+                </div>
               )}
-            </button>
+            </div>
 
             {/* 橡皮工具 */}
             <button
@@ -7853,8 +8137,8 @@ const Workspace: React.FC = () => {
                     onDoubleClick={() => {
                       if (el.type === "text") {
                         setEditingTextId(el.id);
-                      } else if (getElementSourceUrl(el)) {
-                        setPreviewUrl(getElementSourceUrl(el) || null);
+                      } else if (el.url) {
+                        setPreviewUrl(getElementSourceUrl(el) || el.url);
                       }
                     }}
                   >
@@ -8165,7 +8449,9 @@ const Workspace: React.FC = () => {
                                           ? "矢量线稿中"
                                           : el.generatingType === "remove-bg"
                                             ? "背景移除中"
-                                            : "正在处理中"}
+                                            : el.generatingType === "product-swap"
+                                              ? "产品替换中"
+                                              : "正在处理中"}
                                     </span>
                                     <span className="text-[10px] text-blue-400 opacity-70 animate-pulse">
                                       Creating magic...

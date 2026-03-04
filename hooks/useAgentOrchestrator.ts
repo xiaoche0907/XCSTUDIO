@@ -9,6 +9,12 @@ import { useImageHostStore } from '../stores/imageHost.store';
 import { localPreRoute } from '../services/agents/local-router';
 import { addTopicMemoryItem, buildTopicPinnedContext, extractConstraintHints, upsertTopicSnapshot } from '../services/topic-memory';
 import { getMemoryKey } from '../services/topicMemory/key';
+import {
+  detectExplicitAgentPin,
+  detectOptimizeThenExecuteIntent,
+  stripOptimizePipelineCommand,
+} from '../services/agents/prompt-optimizer/intent';
+import { optimizeUserText } from '../services/agents/prompt-optimizer/service';
 
 interface CanvasState {
   elements: CanvasElement[];
@@ -226,8 +232,57 @@ export function useAgentOrchestrator(options: UseAgentOrchestratorOptions) {
         }
       }
 
+      const optimizerEnabled = import.meta.env.VITE_PROMPT_OPTIMIZER_ENABLED !== 'false';
+      const optimizerPipelineEnabled = import.meta.env.VITE_PROMPT_OPTIMIZER_PIPELINE_ENABLED !== 'false';
+      const isInternalCall = (metadata as any)?.internalCall === true;
+
+      let messageForExecution = message;
+      let pinnedAgent: AgentType | null = null;
+      let useOptimizeThenExecute = false;
+      let optimizerUsed = false;
+      let optimizerStatus: 'ok' | 'timeout' | 'fail' | 'skipped' = 'skipped';
+      let optimizedMessageForTrace: string | undefined;
+
+      if (
+        !isInternalCall &&
+        optimizerEnabled &&
+        optimizerPipelineEnabled &&
+        detectOptimizeThenExecuteIntent(message)
+      ) {
+        useOptimizeThenExecute = true;
+        optimizerUsed = true;
+        const strippedInput = stripOptimizePipelineCommand(message) || message;
+        const optimized = await optimizeUserText(strippedInput, updatedContext, {
+          requestId: userMessageId,
+        });
+        if (optimized.ok && optimized.optimizedText) {
+          messageForExecution = optimized.optimizedText;
+          optimizedMessageForTrace = optimized.optimizedText;
+          optimizerStatus = 'ok';
+        } else {
+          const failReason = (optimized as { reason?: string }).reason || '';
+          optimizerStatus = failReason === 'timeout' ? 'timeout' : 'fail';
+        }
+
+        const pinned = detectExplicitAgentPin(message);
+        if (
+          pinned &&
+          [
+            'coco',
+            'vireo',
+            'cameron',
+            'poster',
+            'package',
+            'motion',
+            'campaign',
+          ].includes(pinned)
+        ) {
+          pinnedAgent = pinned as AgentType;
+        }
+      }
+
       // Pipeline detection
-      const pipelineId = detectPipeline(message);
+      const pipelineId = !useOptimizeThenExecute ? detectPipeline(messageForExecution) : null;
       if (pipelineId && PIPELINES[pipelineId]) {
         const pipeline = PIPELINES[pipelineId];
         console.log('[useAgentOrchestrator] Pipeline detected:', pipeline.name);
@@ -236,14 +291,14 @@ export function useAgentOrchestrator(options: UseAgentOrchestratorOptions) {
           id: `pipeline-${Date.now()}`,
           agentId: pipeline.steps[0].agentId,
           status: 'analyzing',
-          input: { message, context: updatedContext },
+          input: { message: messageForExecution, context: updatedContext },
           createdAt: Date.now(),
           updatedAt: Date.now()
         });
 
         console.log('[useAgentOrchestrator] Pipeline request start');
         const pipelineResult = await withTimeout(
-          executePipeline(pipeline, message, updatedContext, (stepIdx, stepResult) => {
+          executePipeline(pipeline, messageForExecution, updatedContext, (stepIdx, stepResult) => {
             console.log(`[useAgentOrchestrator] Pipeline step ${stepIdx} done:`, stepResult.status);
             setCurrentTask(stepResult);
           }),
@@ -269,21 +324,29 @@ export function useAgentOrchestrator(options: UseAgentOrchestratorOptions) {
 
       // Single agent routing — try local keyword match first to skip API call
       console.log('[useAgentOrchestrator] Routing to agent...');
-      const localAgent = localPreRoute(message);
+      const localAgent = localPreRoute(messageForExecution);
       let decision;
-      if (localAgent) {
+      if (pinnedAgent) {
+        decision = {
+          targetAgent: pinnedAgent,
+          taskType: 'optimized-routed',
+          complexity: 'simple' as const,
+          handoffMessage: `用户请求(已优化): ${messageForExecution}`,
+          confidence: 0.9,
+        };
+      } else if (localAgent) {
         console.log('[useAgentOrchestrator] Local pre-route hit:', localAgent);
         decision = {
           targetAgent: localAgent,
           taskType: 'local-routed',
           complexity: 'simple' as const,
-          handoffMessage: `用户请求: ${message}`,
+          handoffMessage: `用户请求: ${messageForExecution}`,
           confidence: 0.75
         };
       } else {
         console.log('[useAgentOrchestrator] 发起路由请求...');
         decision = await withTimeout(
-          routeToAgent(message, updatedContext),
+          routeToAgent(messageForExecution, updatedContext),
           20000,
           '路由请求超时，请稍后重试'
         );
@@ -296,7 +359,7 @@ export function useAgentOrchestrator(options: UseAgentOrchestratorOptions) {
           targetAgent: 'poster' as AgentType,
           taskType: 'fallback',
           complexity: 'simple' as const,
-          handoffMessage: `用户请求: ${message}`,
+          handoffMessage: `用户请求: ${messageForExecution}`,
           confidence: 0.4
         };
       }
@@ -307,18 +370,36 @@ export function useAgentOrchestrator(options: UseAgentOrchestratorOptions) {
         ...(metadata || {}),
         topicId,
         topicPinnedContext,
+        originalMessage: message,
+        optimizedMessage: optimizedMessageForTrace,
+        optimizerUsed,
+        optimizerStatus,
+        allReferenceImageUrls: [...uploadedUrls],
+        injectedReferenceImageUrls: [] as string[],
         multimodalContext: {
-          referenceImageUrls: [...topicPinnedRefs, ...uploadedUrls].slice(0, 4),
-          hasReferenceImages: topicPinnedRefs.length + uploadedUrls.length > 0,
+          ...(metadata?.multimodalContext || {}),
+          referenceImageUrls: [
+            ...topicPinnedRefs,
+            ...((metadata?.multimodalContext?.referenceImageUrls as string[]) || []),
+            ...uploadedUrls,
+          ].filter((url, idx, arr) => typeof url === 'string' && !!url && arr.indexOf(url) === idx),
+          hasReferenceImages:
+            topicPinnedRefs.length +
+              (((metadata?.multimodalContext?.referenceImageUrls as string[]) || []).length) +
+              uploadedUrls.length >
+            0,
         },
       };
+
+      const originalAttachmentCount = attachments?.length || 0;
+      const originalUploadedCount = uploadedUrls.length;
 
       const task: AgentTask = {
         id: `task-${Date.now()}`,
         agentId: decision.targetAgent,
         status: 'pending',
         input: {
-          message,
+          message: messageForExecution,
           attachments,
           uploadedAttachments: uploadedUrls.length > 0 ? uploadedUrls : undefined,
           context: updatedContext,
@@ -327,6 +408,20 @@ export function useAgentOrchestrator(options: UseAgentOrchestratorOptions) {
         createdAt: Date.now(),
         updatedAt: Date.now()
       };
+
+      const passthroughAttachmentCount = task.input.attachments?.length || 0;
+      const passthroughUploadedCount = task.input.uploadedAttachments?.length || 0;
+      if (
+        passthroughAttachmentCount !== originalAttachmentCount ||
+        passthroughUploadedCount !== originalUploadedCount
+      ) {
+        const err =
+          `[useAgentOrchestrator] Attachment passthrough mismatch: attachments ${passthroughAttachmentCount}/${originalAttachmentCount}, uploaded ${passthroughUploadedCount}/${originalUploadedCount}`;
+        if (import.meta.env.MODE === 'test' || import.meta.env.DEV) {
+          throw new Error(err);
+        }
+        console.error(err);
+      }
 
       setCurrentTask({ ...task, status: 'analyzing' });
 

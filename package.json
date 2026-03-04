@@ -7,7 +7,8 @@
     "dev": "vite",
     "build:video": "cd XC-VIDEO && npm install && npm run build",
     "build": "npm run build:video && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:optimizer": "node --experimental-strip-types --test services/agents/prompt-optimizer/*.test.ts services/agents/utils/*.test.ts"
   },
   "dependencies": {
     "@google/genai": "^1.38.0",

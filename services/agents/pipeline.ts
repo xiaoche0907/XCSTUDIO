@@ -101,6 +101,21 @@ function collectAssets(results: AgentTask[]): GeneratedAsset[] {
 // ─── 预定义 Pipeline ───
 
 export const PIPELINES: Record<string, Pipeline> = {
+    'optimize-then-execute': {
+        id: 'optimize-then-execute',
+        name: '提示词优化后执行',
+        description: 'Prompt Optimizer 先优化提示词，再交给目标智能体执行',
+        steps: [
+            { agentId: 'prompt-optimizer' },
+            {
+                agentId: 'poster',
+                inputTransform: (prev) => ({
+                    message: prev.output?.message || ''
+                }),
+                condition: (prev) => prev.status === 'completed'
+            }
+        ]
+    },
     'storyboard-to-video': {
         id: 'storyboard-to-video',
         name: '分镜到视频',
