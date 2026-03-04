@@ -472,10 +472,7 @@ export const generateVideo = async (
 
     const modelDurationRules: Record<string, number[]> = {
         'veo_3_1-fast': [4, 6, 8],
-        'veo_3_1-fast-4K': [4, 6, 8],
         'veo3.1': [4, 6, 8],
-        'veo_3_1-4K': [4, 6, 8],
-        'veo3.1-4k': [4, 6, 8],
         'veo-3.1-fast-generate-preview': [4, 6, 8],
         'veo-3.1-generate-preview': [4, 6, 8],
         'sora-2': [4, 8, 10, 12, 15],
@@ -494,12 +491,12 @@ export const generateVideo = async (
         ? requestedDuration
         : allowedDurations[0];
 
-    let resolution = options.resolution || (effectiveModel.includes('pro') ? '2k' : '1k');
+    let resolution = options.resolution || (effectiveModel.includes('pro') ? '1080p' : '720p');
     let apiResolution = resolution;
     if (isYunwu) {
-        if (resolution === '1k') apiResolution = '720p';
-        else if (resolution === '2k') apiResolution = '1080p';
-        else if (resolution === '4k') apiResolution = '4k';
+        // UI now sends 720p/1080p/4k directly, pass through
+        if (resolution === '1k') apiResolution = '720p';  // legacy fallback
+        else if (resolution === '2k') apiResolution = '1080p';  // legacy fallback
     }
 
     let finalInputImageBase64: string | null = null;

@@ -45,7 +45,7 @@ interface NodeProps {
 const IMAGE_ASPECT_RATIOS = ['1:1', '3:4', '4:3', '9:16', '16:9'];
 const VIDEO_ASPECT_RATIOS = ['1:1', '3:4', '4:3', '9:16', '16:9'];
 const IMAGE_RESOLUTIONS = ['1k', '2k', '4k'];
-const VIDEO_RESOLUTIONS = ['1k', '2k', '4k'];
+const VIDEO_RESOLUTIONS = ['720p', '1080p', '4k'];
 const IMAGE_COUNTS = [1, 2, 3, 4];
 const VIDEO_COUNTS = [1, 2, 3, 4];
 
@@ -53,53 +53,38 @@ const VIDEO_COUNTS = [1, 2, 3, 4];
 const MODEL_CONFIGS: Record<string, any> = {
     'veo_3_1-fast': {
         ratios: ['1:1', '4:3', '3:4', '16:9', '9:16', '21:9'],
-        resolutions: ['1k', '2k', '4k'],
-        durations: [4, 6, 8]
-    },
-    'veo_3_1-fast-4K': {
-        ratios: ['1:1', '4:3', '3:4', '16:9', '9:16', '21:9'],
-        resolutions: ['1k', '2k', '4k'],
+        resolutions: ['720p', '1080p', '4k'],
         durations: [4, 6, 8]
     },
     'veo3.1': {
         ratios: ['1:1', '4:3', '3:4', '16:9', '9:16', '21:9'],
-        resolutions: ['1k', '2k', '4k'],
-        durations: [4, 6, 8]
-    },
-    'veo_3_1-4K': {
-        ratios: ['1:1', '4:3', '3:4', '16:9', '9:16', '21:9'],
-        resolutions: ['1k', '2k', '4k'],
-        durations: [4, 6, 8]
-    },
-    'veo3.1-4k': {
-        ratios: ['1:1', '4:3', '3:4', '16:9', '9:16', '21:9'],
-        resolutions: ['1k', '2k', '4k'],
+        resolutions: ['720p', '1080p', '4k'],
         durations: [4, 6, 8]
     },
     'sora-2': {
         ratios: ['1:1', '4:3', '3:4', '16:9', '9:16', '21:9'],
-        resolutions: ['1k', '2k'],
+        resolutions: ['720p', '1080p'],
         durations: [4, 8, 10, 12, 15]
     },
     'sora-2-pro': {
         ratios: ['1:1', '4:3', '3:4', '16:9', '9:16', '21:9'],
-        resolutions: ['1k', '2k', '4k'],
+        resolutions: ['720p', '1080p', '4k'],
         durations: [4, 8, 10, 12, 15]
     },
     'kling-3.0': {
         ratios: ['16:9', '9:16', '1:1'],
-        resolutions: ['1k', '2k'],
+        resolutions: ['720p', '1080p'],
         qualities: [{ l: 'Standard', v: 'std' }, { l: 'Pro', v: 'pro' }],
         durations: [5, 10]
     },
     'grok-video-3-15s': {
         ratios: ['1:1', '4:3', '3:4', '16:9', '9:16', '21:9'],
-        resolutions: ['1k', '2k'],
+        resolutions: ['720p', '1080p'],
         durations: [15]
     },
     'grok-video-3-10s': {
         ratios: ['1:1', '4:3', '3:4', '16:9', '9:16', '21:9'],
-        resolutions: ['1k', '2k'],
+        resolutions: ['720p', '1080p'],
         durations: [10]
     }
 };
@@ -632,10 +617,7 @@ const NodeComponent: React.FC<NodeProps> = ({
         if (node.type === NodeType.VIDEO_GENERATOR || node.type === NodeType.IMAGE_TO_VIDEO) {
             models = [
                 { l: 'Veo 3.1 极速版 (Fast)', v: 'veo_3_1-fast' },
-                { l: 'Veo 3.1 极速版 (Fast 4K)', v: 'veo_3_1-fast-4K' },
                 { l: 'Veo 3.1 专业版 (Pro)', v: 'veo3.1' },
-                { l: 'Veo 3.1 专业版 (Pro 4k)', v: 'veo3.1-4k' },
-                { l: 'Veo 3.1 专业版 (Pro 4K - 2)', v: 'veo_3_1-4K' },
                 { l: 'Sora 2.0', v: 'sora-2' },
                 { l: 'Sora 2.0 Pro', v: 'sora-2-pro' },
                 { l: 'Kling 3.0 (可灵)', v: 'kling-3.0' },

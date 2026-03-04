@@ -445,7 +445,7 @@ export const App = () => {
         try { saveHistory(); } catch (e) { }
 
         const defaults: any = {
-            model: type === NodeType.VIDEO_GENERATOR ? 'veo-3.1-fast-generate-preview' :
+            model: type === NodeType.VIDEO_GENERATOR ? 'veo_3_1-fast' :
                 type === NodeType.VIDEO_ANALYZER ? 'gemini-3-pro-preview' :
                     type === NodeType.AUDIO_GENERATOR ? 'gemini-2.5-flash-preview-tts' :
                         type === NodeType.IMAGE_GENERATOR || type === NodeType.IMAGE_TO_IMAGE || type === NodeType.IMAGE_TO_VIDEO ? 'gemini-3-pro-image-preview' :
@@ -505,7 +505,7 @@ export const App = () => {
         try {
             const res = await generateVideo(
                 complexPrompt,
-                'veo-3.1-generate-preview',
+                'veo3.1',
                 { aspectRatio: '16:9', count: 1 },
                 frames[0].src,
                 null,
@@ -853,7 +853,7 @@ export const App = () => {
                 }
 
                 const mode = node.data.generationMode || 'DEFAULT';
-                const model = node.data.model || 'veo-3.1-fast-generate-preview';
+                const model = node.data.model || 'veo_3_1-fast';
 
                 let finalPrompt = prompt;
                 // Assuming characterImage is defined elsewhere if needed for 'CHARACTER' mode
@@ -864,7 +864,7 @@ export const App = () => {
                 const res = await generateVideo(finalPrompt, model, {
                     aspectRatio: node.data.aspectRatio || '16:9',
                     duration: node.data.duration || 5,
-                    resolution: node.data.resolution || '1k'
+                    resolution: node.data.resolution || '720p'
                 }, initialImage);
 
                 if (res.isFallbackImage) {
