@@ -1,6 +1,7 @@
 import React from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
+import { ROUTES, createNewWorkspacePath } from "../utils/routes";
 import {
   Home as HomeIcon,
   Folder,
@@ -21,7 +22,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onNewProject }) => {
     if (onNewProject) {
       onNewProject();
     } else {
-      navigate(`/workspace/new-${Date.now()}`);
+      navigate(createNewWorkspacePath());
     }
   };
 
@@ -47,8 +48,8 @@ const Sidebar: React.FC<SidebarProps> = ({ onNewProject }) => {
 
         <div className="w-12 py-6 bg-card/80 backdrop-blur-xl rounded-full shadow-premium flex flex-col items-center gap-6 border border-border/50">
           <button
-            onClick={() => navigate("/dashboard")}
-            className={`p-2 rounded-full transition ${isActive("/")
+            onClick={() => navigate(ROUTES.dashboard)}
+            className={`p-2 rounded-full transition ${isActive(ROUTES.dashboard)
               ? "bg-gray-100 text-black shadow-sm"
               : "text-gray-400 hover:text-black hover:bg-gray-50"
               }`}
@@ -57,8 +58,8 @@ const Sidebar: React.FC<SidebarProps> = ({ onNewProject }) => {
             <HomeIcon size={20} />
           </button>
           <button
-            onClick={() => navigate("/projects")}
-            className={`p-2 rounded-full transition ${isActive("/projects")
+            onClick={() => navigate(ROUTES.projects)}
+            className={`p-2 rounded-full transition ${isActive(ROUTES.projects)
               ? "bg-gray-100 text-black shadow-sm"
               : "text-gray-400 hover:text-black hover:bg-gray-50"
               }`}
@@ -67,8 +68,8 @@ const Sidebar: React.FC<SidebarProps> = ({ onNewProject }) => {
             <Folder size={20} />
           </button>
           <button
-            onClick={() => navigate("/video-workspace")}
-            className={`p-2 rounded-full transition ${isActive("/video-workspace")
+            onClick={() => navigate(ROUTES.videoWorkspace)}
+            className={`p-2 rounded-full transition ${isActive(ROUTES.videoWorkspace)
               ? "bg-gray-100 text-black shadow-sm"
               : "text-gray-400 hover:text-black hover:bg-gray-50"
               }`}
@@ -77,8 +78,8 @@ const Sidebar: React.FC<SidebarProps> = ({ onNewProject }) => {
             <Video size={20} />
           </button>
           <button
-            onClick={() => navigate("/settings")}
-            className={`p-2 rounded-full transition ${isActive("/settings")
+            onClick={() => navigate(ROUTES.settings)}
+            className={`p-2 rounded-full transition ${isActive(ROUTES.settings)
               ? "bg-gray-100 text-black shadow-sm"
               : "text-gray-400 hover:text-black hover:bg-gray-50"
               }`}
@@ -92,17 +93,17 @@ const Sidebar: React.FC<SidebarProps> = ({ onNewProject }) => {
       {/* 移动端底部导航 */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 h-16 bg-white/80 backdrop-blur-xl border-t border-gray-100 flex items-center justify-around px-4 z-50 pb-safe">
         <button
-          onClick={() => navigate("/dashboard")}
-          className={`flex flex-col items-center gap-1 ${isActive("/") ? "text-black" : "text-gray-400"}`}
+          onClick={() => navigate(ROUTES.dashboard)}
+          className={`flex flex-col items-center gap-1 ${isActive(ROUTES.dashboard) ? "text-black" : "text-gray-400"}`}
         >
-          <HomeIcon size={20} strokeWidth={isActive("/") ? 2.5 : 2} />
+          <HomeIcon size={20} strokeWidth={isActive(ROUTES.dashboard) ? 2.5 : 2} />
           <span className="text-[10px] font-black uppercase tracking-tighter">首页</span>
         </button>
         <button
-          onClick={() => navigate("/projects")}
-          className={`flex flex-col items-center gap-1 ${isActive("/projects") ? "text-black" : "text-gray-400"}`}
+          onClick={() => navigate(ROUTES.projects)}
+          className={`flex flex-col items-center gap-1 ${isActive(ROUTES.projects) ? "text-black" : "text-gray-400"}`}
         >
-          <Folder size={20} strokeWidth={isActive("/projects") ? 2.5 : 2} />
+          <Folder size={20} strokeWidth={isActive(ROUTES.projects) ? 2.5 : 2} />
           <span className="text-[10px] font-black uppercase tracking-tighter">项目</span>
         </button>
 
@@ -117,17 +118,17 @@ const Sidebar: React.FC<SidebarProps> = ({ onNewProject }) => {
         </div>
 
         <button
-          onClick={() => navigate("/video-workspace")}
-          className={`flex flex-col items-center gap-1 ${isActive("/video-workspace") ? "text-black" : "text-gray-400"}`}
+          onClick={() => navigate(ROUTES.videoWorkspace)}
+          className={`flex flex-col items-center gap-1 ${isActive(ROUTES.videoWorkspace) ? "text-black" : "text-gray-400"}`}
         >
-          <Video size={20} strokeWidth={isActive("/video-workspace") ? 2.5 : 2} />
+          <Video size={20} strokeWidth={isActive(ROUTES.videoWorkspace) ? 2.5 : 2} />
           <span className="text-[10px] font-black uppercase tracking-tighter">视频</span>
         </button>
         <button
-          onClick={() => navigate("/settings")}
-          className={`flex flex-col items-center gap-1 ${isActive("/settings") ? "text-black" : "text-gray-400"}`}
+          onClick={() => navigate(ROUTES.settings)}
+          className={`flex flex-col items-center gap-1 ${isActive(ROUTES.settings) ? "text-black" : "text-gray-400"}`}
         >
-          <Settings size={20} strokeWidth={isActive("/settings") ? 2.5 : 2} />
+          <Settings size={20} strokeWidth={isActive(ROUTES.settings) ? 2.5 : 2} />
           <span className="text-[10px] font-black uppercase tracking-tighter">设置</span>
         </button>
       </div>

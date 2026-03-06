@@ -8,6 +8,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronDown } from 'lucide-react';
+import { ROUTES } from '../../../utils/routes';
 
 interface ProjectHeaderProps {
   initialTitle?: string;
@@ -30,7 +31,7 @@ export const ProjectHeader: React.FC<ProjectHeaderProps> = ({
     <div className="flex items-center gap-3 pointer-events-auto transition-all duration-300">
       {/* Logo Button */}
       <button
-        onClick={() => navigate('/')}
+        onClick={() => navigate(ROUTES.landing)}
         className="w-10 h-10 bg-black rounded-full flex items-center justify-center text-white font-bold text-xs shadow-md hover:scale-105 transition"
       >
         XC

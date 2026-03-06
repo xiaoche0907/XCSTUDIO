@@ -12,6 +12,7 @@ import { getMemoryKey } from '../services/topicMemory/key';
 import { AnimatePresence } from 'framer-motion';
 import { SettingsModal } from '../components/SettingsModal';
 import Sidebar from '../components/Sidebar';
+import { createNewWorkspacePath, workspacePath } from '../utils/routes';
 
 const toMemoryKey = (workspaceId: string, conversationId: string): string => {
   if (!workspaceId || !conversationId) return conversationId;
@@ -108,13 +109,13 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
         transition={{ duration: 0.2 }}
         onClick={() => {
             if (isNew) {
-                navigate(`/workspace/new-${Date.now()}`);
+                navigate(createNewWorkspacePath());
                 return;
             }
             if (isSelectMode && project) {
                 onSelect(project.id);
             } else if (!isRenaming) {
-                navigate(`/workspace/${project?.id}`);
+                if (project?.id) navigate(workspacePath(project.id));
             }
         }}
         className={`flex flex-col gap-2 cursor-pointer group relative ${isSelected ? 'scale-95' : ''}`}

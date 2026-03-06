@@ -30,6 +30,7 @@ import { Project } from "../types";
 import { getProjects } from "../services/storage";
 import { SettingsModal } from "../components/SettingsModal";
 import Sidebar from "../components/Sidebar";
+import { ROUTES, createNewWorkspacePath, workspacePath } from "../utils/routes";
 
 const Header = () => (
   <header className="fixed top-0 left-0 right-0 h-16 px-8 flex items-center justify-between z-40 bg-white/70 backdrop-blur-md border-b border-white/20 shadow-sm shadow-gray-100/20">
@@ -93,7 +94,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
   if (isNew) {
     return (
       <div
-        onClick={() => navigate(`/workspace/new-${Date.now()}`)}
+        onClick={() => navigate(createNewWorkspacePath())}
         className="aspect-[4/3] bg-gray-100 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:bg-gray-200 transition group"
       >
         <Plus
@@ -107,7 +108,9 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
 
   return (
     <div
-      onClick={() => navigate(`/workspace/${project?.id}`)}
+      onClick={() => {
+        if (project?.id) navigate(workspacePath(project.id));
+      }}
       className="flex flex-col gap-2 cursor-pointer group"
     >
       <div className="aspect-[4/3] bg-gray-100 rounded-xl overflow-hidden border border-gray-100 group-hover:shadow-md transition relative">
@@ -163,7 +166,7 @@ const Home: React.FC<{ onExit?: () => void }> = ({ onExit }) => {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (prompt.trim() || attachments.length > 0) {
-      navigate(`/workspace/new-${Date.now()}`, {
+      navigate(createNewWorkspacePath(), {
         state: {
           initialPrompt: prompt,
           initialAttachments: attachments,
@@ -196,7 +199,7 @@ const Home: React.FC<{ onExit?: () => void }> = ({ onExit }) => {
       <Sidebar />
       {onExit && (
         <button
-          onClick={onExit || (() => navigate("/dashboard"))}
+          onClick={onExit || (() => navigate(ROUTES.dashboard))}
           className="fixed top-24 left-6 z-[60] px-4 py-2 bg-white backdrop-blur-md border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 hover:text-gray-900 transition-all font-medium text-sm flex items-center gap-2 shadow-sm"
         >
           <svg
