@@ -3640,10 +3640,20 @@ const Workspace: React.FC = () => {
 
   const commitTextEdit = (elementId: string, rawText: string) => {
     const nextText = rawText || "";
+    const hasVisibleText = nextText.trim().length > 0;
     delete textEditDraftRef.current[elementId];
 
     const prevEl = elementsRef.current.find((el) => el.id === elementId);
     if (!prevEl || prevEl.type !== "text") return;
+
+    if (!hasVisibleText) {
+      const filteredElements = elementsRef.current.filter((el) => el.id !== elementId);
+      setElementsSynced(filteredElements);
+      setSelectedElementId((prev) => (prev === elementId ? null : prev));
+      setSelectedElementIds((prev) => prev.filter((id) => id !== elementId));
+      saveToHistory(filteredElements, markersRef.current);
+      return;
+    }
 
     // 计算最终宽度
     const finalWidth = getTextWidth(
@@ -6675,16 +6685,11 @@ ${analysis}
     const el = selectedElement;
     if (!el || el.type !== "text") return null;
 
-    // 自适应动态缩放逻辑：
-    // 当 zoom >= 100 时，工具栏随画布 1:1 缩放，保持物理关联感。
-    // 当 zoom < 100 时，工具栏缓慢缩小（不完全随 zoom 消失），保证在极小缩放时依然可操作。
-    const currentZoom = zoom / 100;
-    const dynamicScale = currentZoom >= 1 
-      ? 1 
-      : 1 / (1 + (1 / currentZoom - 1) * 0.6); // 这里的 0.6 是补偿系数，值越大缩小越快，值越小越“坚挺”
+    // 文字工具栏保持屏幕可读尺寸：与画布缩放做反向抵消
+    const dynamicScale = Math.max(0.1, 100 / zoom);
     
     const canvasCenterX = el.x + el.width / 2;
-    const toolbarTop = el.y - (64 / dynamicScale); // 增加偏移到 64，防止遮挡内容
+    const toolbarTop = el.y - 64 * dynamicScale;
     const updateEl = (patch: any) => {
       const newElements = elements.map(item => 
         item.id === el.id ? { ...item, ...patch } : item
@@ -9954,7 +9959,7 @@ ${analysis}
                               height: "100%",
                             }}
                           >
-                            {el.text || "Text"}
+                            {el.text || ""}
                           </div>
                         )}
                       </div>
