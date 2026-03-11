@@ -8,8 +8,11 @@ export interface MarkerInfo {
   y: number;
   width: number;
   height: number;
-  originalWidth: number;
-  originalHeight: number;
+  // 兼容两种命名：Workspace 传入的是 imageWidth/imageHeight
+  originalWidth?: number;
+  originalHeight?: number;
+  imageWidth?: number;
+  imageHeight?: number;
 }
 
 /**
@@ -18,9 +21,13 @@ export interface MarkerInfo {
  * 白色 (#FFFFFF) = 可编辑区域
  */
 export async function createMaskDataUrl(info: MarkerInfo): Promise<string> {
+  // 兼容两种命名方式
+  const canvasW = info.imageWidth || info.originalWidth || 1024;
+  const canvasH = info.imageHeight || info.originalHeight || 1024;
+
   const canvas = document.createElement('canvas');
-  canvas.width = info.originalWidth;
-  canvas.height = info.originalHeight;
+  canvas.width = canvasW;
+  canvas.height = canvasH;
   const ctx = canvas.getContext('2d');
 
   if (!ctx) {
@@ -35,5 +42,8 @@ export async function createMaskDataUrl(info: MarkerInfo): Promise<string> {
   ctx.fillStyle = '#FFFFFF';
   ctx.fillRect(info.x, info.y, info.width, info.height);
 
+  console.log(`[mask-generator] Created mask: canvas=${canvasW}x${canvasH}, editRegion=(${info.x},${info.y},${info.width},${info.height})`);
+
   return canvas.toDataURL('image/png');
 }
+

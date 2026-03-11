@@ -1754,14 +1754,18 @@ ${productSection}${quantitySection}${multiImageSection}${forcedToolSection}${mul
               call.params[paramKey] = info.fullImageUrl;
             }
             
-            // 1. 设置宽高比
-            const ratio = info.width / info.height;
+            // 1. 设置宽高比 —— 必须使用原图的真实尺寸 (imageWidth / imageHeight)
+            // 注意：info.width/height 是圈选区域的大小，不是原图大小！
+            const imgW = info.imageWidth || info.width;
+            const imgH = info.imageHeight || info.height;
+            const ratio = imgW / imgH;
             let aspect = "1:1";
             if (ratio > 1.5) aspect = "16:9";
-            else if (ratio < 0.7) aspect = "9:16";
+            else if (ratio < 0.67) aspect = "9:16";
             else if (ratio > 1.2) aspect = "4:3";
-            else if (ratio < 0.8) aspect = "3:4";
+            else if (ratio < 0.83) aspect = "3:4";
             call.params.aspectRatio = aspect;
+            console.log(`[${this.agentInfo.id}] Original image size: ${imgW}x${imgH}, ratio=${ratio.toFixed(3)}, aspectRatio=${aspect}`);
 
             // 2. 核心修复：生成遮罩图片注入 maskImage
             try {
