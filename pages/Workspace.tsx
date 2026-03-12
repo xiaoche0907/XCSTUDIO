@@ -4003,8 +4003,9 @@ const Workspace: React.FC = () => {
   const buildProductSwapPrompt = (analysis: string): string => {
     return `You are a world-class commercial product photography director. Follow the 8-phase execution pipeline strictly to perform a photorealistic product swap.
 
-[SCENE ANALYSIS]
-${analysis}
+[INPUT MANIFEST]
+- Image 1: Reference Scene (Blueprint – keep everything EXCEPT target products)
+- Image 2 onwards: Product Pool (Your actual products to swap in)
 
 [REQUIREMENTS]
 - Phase 1-4: Source analysis & physical lighting matching
@@ -4065,6 +4066,7 @@ ${analysis}
               ? "2K"
               : "4K",
         referenceImages: allImages,
+        referenceMode: "product-swap",
         consistencyContext: getDesignConsistencyContext(),
       });
 

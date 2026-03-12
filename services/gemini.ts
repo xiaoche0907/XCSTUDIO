@@ -1154,7 +1154,7 @@ export interface ImageGenerationConfig {
     maskImage?: string; // Binary mask for inpainting
     referenceStrength?: number;
     referencePriority?: 'first' | 'all';
-    referenceMode?: 'style' | 'product' | 'portrait';
+    referenceMode?: 'style' | 'product' | 'portrait' | 'product-swap';
     consistencyContext?: {
         approvedAssetIds?: string[];
         subjectAnchors?: string[];
@@ -1184,7 +1184,7 @@ const buildConstrainedPrompt = (
     userPrompt: string,
     opts: {
         strength: number;
-        mode: 'style' | 'product' | 'portrait';
+        mode: 'style' | 'product' | 'portrait' | 'product-swap';
         referenceCount?: number;
         priority?: 'first' | 'all';
         forbiddenChanges?: string[];
@@ -1211,6 +1211,24 @@ const buildConstrainedPrompt = (
 - BACKGROUND LOCK: Keep the original background, lighting, and camera perspective unchanged.
 `
             : `
+[Universal Consistency Iron-Rules]
+- PRESERVE all visual elements from the reference.
+- ONLY modify what the user explicitly mentioned.
+- KEEP background, lighting, and global composition 100% matched with the reference.
+`
+            : opts.mode === 'product-swap'
+                ? `
+[Product Swap Iron-Rules]
+- IMAGE 1 IS THE "REFERENCE SCENE" (The Blueprint):
+  * ABSOLUTELY LOCK the person's identity, facial features, skin tone, hairstyle, and body pose.
+  * ABSOLUTELY LOCK the background, current lighting physics, and camera angle.
+  * DO NOT introduce any features from the product pool into the human model themselves.
+- IMAGE 2+ ARE THE "PRODUCT POOL" (The Target):
+  * Treat these as the physical items to be placed INTO the scene from Image 1.
+  * Extract material fidelity, stitching detail, and structural cuts from these images.
+- SEAMLESS INTEGRATION: The only change allowed is the product being swapped and its natural interaction with the scene (shadows/creases).
+`
+                : `
 [Universal Consistency Iron-Rules]
 - PRESERVE all visual elements from the reference.
 - ONLY modify what the user explicitly mentioned.
