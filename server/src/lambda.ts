@@ -3,19 +3,28 @@ import app from './index';
 
 const baseHandler = serverless(app);
 
-export const handler = async (event: any, context: any) => {
-  // Alibaba FC http triggers and CLI invoke sometimes pass event as a JSON string.
-  // serverless-http expects an object with `path`/`httpMethod`.
-  let normalizedEvent = event;
-  if (typeof event === 'string') {
-    const trimmed = event.trim();
+export const handler = async (...args: any[]) => {
+  const a = args[0];
+  const b = args[1];
+
+  // FC HTTP trigger can run in HTTP handler mode: (req, res, context)
+  // In this case, we should directly hand off to Express.
+  if (a && typeof a === 'object' && typeof a.method === 'string' && typeof a.url === 'string' && b && typeof b.setHeader === 'function') {
+    return (app as any)(a, b);
+  }
+
+  // Otherwise, treat as event handler mode (CLI invoke / other runtimes)
+  let normalizedEvent = a;
+  if (typeof a === 'string') {
+    const trimmed = a.trim();
     if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
       try {
-        normalizedEvent = JSON.parse(event);
+        normalizedEvent = JSON.parse(a);
       } catch {
-        normalizedEvent = event;
+        normalizedEvent = a;
       }
     }
   }
-  return baseHandler(normalizedEvent, context);
+
+  return baseHandler(normalizedEvent, args[1]);
 };
