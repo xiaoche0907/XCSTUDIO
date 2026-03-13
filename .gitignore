@@ -36,3 +36,9 @@ error*.json
 *.njsproj
 *.sln
 *.sw?
+
+# Local repo backup
+.git-backup/
+
+# Local tool settings
+.claude/settings.local.json
