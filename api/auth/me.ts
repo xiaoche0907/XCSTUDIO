@@ -1,6 +1,6 @@
-import { prisma } from '../_lib/prisma';
-import { getBearerToken, sendJson } from '../_lib/http';
-import { verifyToken } from '../_lib/auth';
+import { prisma } from '../_lib/prisma.js';
+import { getBearerToken, sendJson } from '../_lib/http.js';
+import { verifyToken } from '../_lib/auth.js';
 
 export default async function handler(req: any, res: any) {
   const token = getBearerToken(req);

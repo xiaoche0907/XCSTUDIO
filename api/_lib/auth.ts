@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
-import { prisma } from './prisma';
+import { prisma } from './prisma.js';
 
 export type JwtClaims = {
   sub: string;

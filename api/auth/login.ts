@@ -1,5 +1,5 @@
-import { readJsonBody, requireMethod, sendJson } from '../_lib/http';
-import { passwordLogin } from '../_lib/auth';
+import { readJsonBody, requireMethod, sendJson } from '../_lib/http.js';
+import { passwordLogin } from '../_lib/auth.js';
 
 export default async function handler(req: any, res: any) {
   if (!requireMethod(req, res, 'POST')) return;
