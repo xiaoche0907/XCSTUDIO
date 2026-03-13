@@ -8,12 +8,16 @@ export type AuthContext = {
   userId: string;
   email: string;
   role: 'USER' | 'ADMIN';
+  workspaceId: string;
+  workspaceRole: 'OWNER' | 'ADMIN' | 'MEMBER';
 };
 
 type JwtPayload = {
   sub: string;
   email: string;
   role: 'USER' | 'ADMIN';
+  wid: string;
+  wrole: 'OWNER' | 'ADMIN' | 'MEMBER';
   iat?: number;
   exp?: number;
 };
@@ -24,6 +28,12 @@ type DbUser = {
   name: string | null;
   role: 'USER' | 'ADMIN';
   passwordHash: string | null;
+  defaultWorkspaceId: string | null;
+};
+
+type DbWorkspace = {
+  id: string;
+  name: string;
 };
 
 const getJwtSecret = (): string => {
@@ -41,6 +51,8 @@ export const signAccessToken = (ctx: AuthContext): string => {
     {
       email: ctx.email,
       role: ctx.role,
+      wid: ctx.workspaceId,
+      wrole: ctx.workspaceRole,
     },
     secret,
     {
@@ -72,7 +84,7 @@ export const requireAuth = () => {
         audience: 'xc-studio-web',
       }) as JwtPayload;
 
-      if (!decoded?.sub || !decoded.email || !decoded.role) {
+      if (!decoded?.sub || !decoded.email || !decoded.role || !decoded.wid || !decoded.wrole) {
         return res.status(401).json({ error: 'Invalid token' });
       }
 
@@ -80,6 +92,8 @@ export const requireAuth = () => {
         userId: decoded.sub,
         email: decoded.email,
         role: decoded.role,
+        workspaceId: decoded.wid,
+        workspaceRole: decoded.wrole,
       } satisfies AuthContext;
       return next();
     } catch (e) {
@@ -102,6 +116,15 @@ export const requireAdmin = () => {
       if (adminToken !== secureToken) return res.status(403).json({ error: 'Forbidden' });
     }
 
+    return next();
+  };
+};
+
+export const requireWorkspaceRole = (roles: Array<AuthContext['workspaceRole']>) => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const auth = (req as any).auth as AuthContext | undefined;
+    if (!auth) return res.status(401).json({ error: 'Unauthorized' });
+    if (!roles.includes(auth.workspaceRole)) return res.status(403).json({ error: 'Forbidden' });
     return next();
   };
 };
@@ -130,7 +153,7 @@ export const handleLogin = (prisma: PrismaClient) => {
 
     const existing = (await prisma.user.findUnique({
       where: { email: emailNorm },
-      select: { id: true, email: true, name: true, role: true, passwordHash: true },
+      select: { id: true, email: true, name: true, role: true, passwordHash: true, defaultWorkspaceId: true },
     })) as DbUser | null;
 
     if (existing?.passwordHash) {
@@ -165,7 +188,7 @@ export const handleLogin = (prisma: PrismaClient) => {
 
     const user = (await prisma.user.findUnique({
       where: { email: emailNorm },
-      select: { id: true, email: true, name: true, role: true, passwordHash: true },
+      select: { id: true, email: true, name: true, role: true, passwordHash: true, defaultWorkspaceId: true },
     })) as DbUser | null;
     if (!user) return res.status(500).json({ error: 'Login failed' });
 
@@ -175,10 +198,70 @@ export const handleLogin = (prisma: PrismaClient) => {
       user.role = 'ADMIN' as any;
     }
 
+    // Ensure a personal workspace exists and is selected.
+    let workspace: DbWorkspace | null = null;
+    let workspaceRole: AuthContext['workspaceRole'] = 'OWNER';
+
+    if (user.defaultWorkspaceId) {
+      workspace = (await prisma.workspace.findUnique({
+        where: { id: user.defaultWorkspaceId },
+        select: { id: true, name: true },
+      })) as DbWorkspace | null;
+    }
+
+    if (!workspace) {
+      // Create a personal workspace and membership.
+      const created = await prisma.workspace.create({
+        data: {
+          name: (user.name || user.email.split('@')[0] || 'Workspace').slice(0, 64),
+          type: 'PERSONAL',
+          createdById: user.id,
+          memberships: {
+            create: {
+              userId: user.id,
+              role: 'OWNER',
+            },
+          },
+        },
+        select: { id: true, name: true },
+      });
+      workspace = created as DbWorkspace;
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { defaultWorkspaceId: workspace.id },
+      });
+    } else {
+      // Ensure membership exists.
+      const membership = await prisma.workspaceMembership.findUnique({
+        where: {
+          workspaceId_userId: {
+            workspaceId: workspace.id,
+            userId: user.id,
+          },
+        },
+        select: { role: true },
+      });
+      if (!membership) {
+        await prisma.workspaceMembership.create({
+          data: {
+            workspaceId: workspace.id,
+            userId: user.id,
+            role: 'OWNER',
+          },
+        });
+        workspaceRole = 'OWNER';
+      } else {
+        workspaceRole = membership.role as any;
+      }
+    }
+
     const token = signAccessToken({
       userId: user.id,
       email: user.email,
       role: (user.role as any) || 'USER',
+      workspaceId: workspace.id,
+      workspaceRole,
     });
 
     return res.json({
@@ -189,6 +272,11 @@ export const handleLogin = (prisma: PrismaClient) => {
         name: user.name,
         role: user.role,
       },
+      workspace: {
+        id: workspace.id,
+        name: workspace.name,
+        role: workspaceRole,
+      },
     });
   };
 };
@@ -196,8 +284,24 @@ export const handleLogin = (prisma: PrismaClient) => {
 export const handleMe = (prisma: PrismaClient) => {
   return async (req: Request, res: Response) => {
     const auth = (req as any).auth as AuthContext;
-    const user = await prisma.user.findUnique({ where: { id: auth.userId } });
+    const user = await prisma.user.findUnique({
+      where: { id: auth.userId },
+      select: { id: true, email: true, name: true, role: true, defaultWorkspaceId: true },
+    });
     if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const workspaceId = auth.workspaceId || user.defaultWorkspaceId;
+    const workspace = workspaceId
+      ? await prisma.workspace.findUnique({ where: { id: workspaceId }, select: { id: true, name: true } })
+      : null;
+
+    const membership = workspaceId
+      ? await prisma.workspaceMembership.findUnique({
+          where: { workspaceId_userId: { workspaceId, userId: user.id } },
+          select: { role: true },
+        })
+      : null;
+
     return res.json({
       user: {
         id: user.id,
@@ -205,6 +309,13 @@ export const handleMe = (prisma: PrismaClient) => {
         name: user.name,
         role: user.role,
       },
+      workspace: workspace
+        ? {
+            id: workspace.id,
+            name: workspace.name,
+            role: (membership?.role as any) || auth.workspaceRole,
+          }
+        : null,
     });
   };
 };

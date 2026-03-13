@@ -246,11 +246,13 @@ app.post('/api/proxy/ai', async (req: ExRequest, res: ExResponse) => {
 import { searchHandler } from './search';
 
 app.get('/api/projects', requireAuth(), async (req: ExRequest, res: ExResponse) => {
-    const userId = (req as any).auth?.userId;
+    const auth = (req as any).auth;
+    const userId = auth?.userId;
+    const workspaceId = auth?.workspaceId;
     try {
         const client = getPrisma();
         const projects = await client.project.findMany({
-            where: { userId },
+            where: { userId, workspaceId },
             orderBy: { updatedAt: 'desc' }
         });
         res.json(projects);

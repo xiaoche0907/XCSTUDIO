@@ -28,7 +28,12 @@ const App: React.FC<{ onExit?: () => void }> = ({ onExit }) => {
       try {
         const me = await fetchMe(token);
         if (cancelled) return;
-        login(me.user.email, token, { id: me.user.id, role: me.user.role === 'ADMIN' ? 'admin' : 'user' });
+        login(
+          me.user.email,
+          token,
+          { id: me.user.id, role: me.user.role === 'ADMIN' ? 'admin' : 'user' },
+          me.workspace
+        );
       } catch {
         if (cancelled) return;
         logout();

@@ -11,15 +11,19 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  clerkId       String?   @unique
-  email         String    @unique
-  name          String?
-  role          UserRole  @default(USER)
-  passwordHash  String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  projects      Project[]
+  id                 String                @id @default(cuid())
+  clerkId            String?               @unique
+  email              String                @unique
+  name               String?
+  role               UserRole              @default(USER)
+  passwordHash       String?
+  defaultWorkspaceId String?
+  defaultWorkspace   Workspace?            @relation("UserDefaultWorkspace", fields: [defaultWorkspaceId], references: [id])
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  projects           Project[]
+  memberships        WorkspaceMembership[]
+  workspacesCreated  Workspace[]           @relation("WorkspaceCreatedBy")
 }
 
 enum UserRole {
@@ -28,24 +32,97 @@ enum UserRole {
 }
 
 model Project {
-  id            String    @id @default(cuid())
-  name          String
-  description   String?
-  thumbnail     String?
-  userId        String
-  user          User      @relation(fields: [userId], references: [id])
-  content       Json?     // 存储工作区状态/历史
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+  thumbnail   String?
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  content   Json? // 存储工作区状态/历史
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId])
+  @@index([workspaceId])
+}
+
+model Workspace {
+  id   String        @id @default(cuid())
+  name String
+  type WorkspaceType @default(PERSONAL)
+
+  createdById String
+  createdBy   User   @relation("WorkspaceCreatedBy", fields: [createdById], references: [id])
+
+  memberships WorkspaceMembership[]
+  projects    Project[]
+  auditLogs   AuditLog[]
+
+  defaultForUsers User[] @relation("UserDefaultWorkspace")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([createdById])
+}
+
+model WorkspaceMembership {
+  id          String        @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        WorkspaceRole @default(MEMBER)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id])
+  user      User      @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+  @@index([workspaceId])
+}
+
+model AuditLog {
+  id          String @id @default(cuid())
+  workspaceId String
+  actorUserId String
+
+  action     String
+  entityType String
+  entityId   String?
+  meta       Json?
+
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id])
+
+  @@index([workspaceId])
+  @@index([actorUserId])
+  @@index([action])
+}
+
+enum WorkspaceType {
+  PERSONAL
+  TEAM
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
 }
 
 model Asset {
-  id            String    @id @default(cuid())
-  url           String
-  type          String    // image, video
-  userId        String
-  projectId     String?
-  createdAt     DateTime  @default(now())
+  id        String   @id @default(cuid())
+  url       String
+  type      String // image, video
+  userId    String
+  projectId String?
+  createdAt DateTime @default(now())
 }

@@ -7,11 +7,18 @@ interface User {
   role: 'user' | 'admin';
 }
 
+interface Workspace {
+  id: string;
+  name: string;
+  role: 'OWNER' | 'ADMIN' | 'MEMBER';
+}
+
 interface AuthState {
   user: User | null;
+  workspace: Workspace | null;
   token: string | null;
   isAuthenticated: boolean;
-  login: (email: string, token: string, user?: Partial<User>) => void;
+  login: (email: string, token: string, user?: Partial<User>, workspace?: Partial<Workspace> | null) => void;
   logout: () => void;
   hydrateFromStorage: () => void;
 }
@@ -24,9 +31,10 @@ export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
       user: null,
+      workspace: null,
       token: null,
       isAuthenticated: false,
-      login: (email, token, user) => {
+      login: (email, token, user, workspace) => {
         // Keep backward-compat for existing modules that read localStorage.auth_token
         try {
           localStorage.setItem('auth_token', token);
@@ -43,13 +51,20 @@ export const useAuthStore = create<AuthState>()(
             email,
             role: normalizedRole,
           },
+          workspace: workspace?.id
+            ? {
+                id: workspace.id,
+                name: (workspace.name as any) || 'Workspace',
+                role: (workspace.role as any) || 'MEMBER',
+              }
+            : null,
           token,
           isAuthenticated: true,
         });
       },
       logout: () => {
         localStorage.removeItem('auth_token');
-        set({ user: null, token: null, isAuthenticated: false });
+        set({ user: null, workspace: null, token: null, isAuthenticated: false });
       },
 
       hydrateFromStorage: () => {
@@ -61,7 +76,7 @@ export const useAuthStore = create<AuthState>()(
         }
 
         if (!token) {
-          set({ user: null, token: null, isAuthenticated: false });
+          set({ user: null, workspace: null, token: null, isAuthenticated: false });
           return;
         }
 

@@ -36,7 +36,7 @@ const Login = () => {
         return;
       }
 
-      login(email, token, data?.user);
+      login(email, token, data?.user, data?.workspace);
       navigate(ROUTES.dashboard);
     } catch (err: any) {
       setError(err?.message || '网络错误，请稍后再试');

@@ -7,6 +7,11 @@ export type AuthMeResponse = {
     name: string | null;
     role: 'USER' | 'ADMIN';
   };
+  workspace: {
+    id: string;
+    name: string;
+    role: 'OWNER' | 'ADMIN' | 'MEMBER';
+  } | null;
 };
 
 export async function fetchMe(token: string): Promise<AuthMeResponse> {
