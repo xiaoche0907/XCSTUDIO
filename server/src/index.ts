@@ -564,7 +564,8 @@ app.use(express.static(publicPath));
 // 处理前端路由 - SPA 特性支持
 app.get('*', (req, res) => {
     // Health check should always return JSON
-    if (req.path === '/health') {
+    const urlish = String((req as any).originalUrl || req.url || '');
+    if (req.path === '/health' || req.path === '/health/' || urlish.startsWith('/health')) {
         res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
         return res.json({ status: 'ok', msg: 'Healthy', version: 'node20-v2-force-' + Date.now() });
     }
