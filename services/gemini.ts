@@ -207,7 +207,8 @@ export const generateJsonResponse = async (
                 body: JSON.stringify({
                     providerId: provider.id,
                     model,
-                    contents: parts,
+                    // Backend expects Gemini-style `contents` (role + parts)
+                    contents: [{ role: 'user', parts }],
                     config: {
                         temperature,
                         responseMimeType: 'application/json',

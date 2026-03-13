@@ -321,6 +321,21 @@ app.post('/api/proxy/ai', async (req: ExRequest, res: ExResponse) => {
     try {
         const { providerId, model, contents, config } = req.body;
 
+        const normalizeContents = (raw: any) => {
+            if (!raw) return raw;
+            if (Array.isArray(raw) && raw.length > 0) {
+                const first = raw[0];
+                if (first && typeof first === 'object' && typeof first.role === 'string' && Array.isArray(first.parts)) {
+                    return raw;
+                }
+                // Looks like a bare parts array
+                return [{ role: 'user', parts: raw }];
+            }
+            return raw;
+        };
+
+        const normalizedContents = normalizeContents(contents);
+
         const isImageInputUnsupportedError = (err: any): boolean => {
             const msg = String(err?.response?.data?.error?.message || err?.message || err || '').toLowerCase();
             return msg.includes('does not support image input')
@@ -387,11 +402,11 @@ app.post('/api/proxy/ai', async (req: ExRequest, res: ExResponse) => {
         };
 
         try {
-            const data = await callProvider(contents);
+            const data = await callProvider(normalizedContents);
             return res.json(data);
         } catch (error: any) {
             if (!isImageInputUnsupportedError(error)) throw error;
-            const textOnly = stripImageParts(contents);
+            const textOnly = stripImageParts(normalizedContents);
             const data = await callProvider(textOnly);
             return res.json({
                 ...data,
