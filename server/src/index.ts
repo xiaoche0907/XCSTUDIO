@@ -156,6 +156,12 @@ app.use((req, res, next) => {
 
 app.use(express.static(publicPath));
 
+// Explicit health check AFTER static so it never gets rewritten
+app.get('/health', (req: ExRequest, res: ExResponse) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.json({ status: 'ok', msg: 'Healthy', version: 'node20-v2-force-' + Date.now() });
+});
+
 // 显式处理根路径
 app.get('/', (req, res) => {
     res.sendFile(path.join(publicPath, 'index.html'));
@@ -557,6 +563,11 @@ app.use(express.static(publicPath));
 
 // 处理前端路由 - SPA 特性支持
 app.get('*', (req, res) => {
+    // Health check should always return JSON
+    if (req.path === '/health') {
+        res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+        return res.json({ status: 'ok', msg: 'Healthy', version: 'node20-v2-force-' + Date.now() });
+    }
     // 如果是 API 请求或特定的静态资源请求（但没找到文件），返回 404
     if (req.path.startsWith('/api/') || (req as any).isAssetRequest) {
         return res.status(404).json({ error: 'Resource Not Found', path: req.path });
