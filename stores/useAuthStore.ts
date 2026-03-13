@@ -21,6 +21,7 @@ interface AuthState {
   login: (email: string, token: string, user?: Partial<User>, workspace?: Partial<Workspace> | null) => void;
   logout: () => void;
   hydrateFromStorage: () => void;
+  setWorkspace: (workspace: Workspace | null) => void;
 }
 
 /**
@@ -66,6 +67,8 @@ export const useAuthStore = create<AuthState>()(
         localStorage.removeItem('auth_token');
         set({ user: null, workspace: null, token: null, isAuthenticated: false });
       },
+
+      setWorkspace: (workspace) => set({ workspace }),
 
       hydrateFromStorage: () => {
         let token: string | null = null;

@@ -181,6 +181,34 @@ app.get('/api/auth/me', requireAuth(), async (req: ExRequest, res: ExResponse) =
     }
 });
 
+// --- Workspaces ---
+app.get('/api/workspaces', requireAuth(), async (req: ExRequest, res: ExResponse) => {
+    const auth = (req as any).auth;
+    const userId = auth?.userId;
+
+    try {
+        const client = getPrisma();
+        const memberships = await client.workspaceMembership.findMany({
+            where: { userId },
+            include: { workspace: true },
+            orderBy: { createdAt: 'asc' }
+        });
+
+        const list = memberships.map((m) => ({
+            id: m.workspace.id,
+            name: m.workspace.name,
+            type: m.workspace.type,
+            role: m.role,
+            createdAt: m.workspace.createdAt,
+        }));
+
+        return res.json({ workspaces: list });
+    } catch (error: any) {
+        console.error('[Workspaces Error]:', error);
+        return res.status(500).json({ error: 'Failed to load workspaces', details: error.message });
+    }
+});
+
 
 
 /**
