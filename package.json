@@ -8,6 +8,7 @@
     "postinstall": "echo postinstall",
     "build:video": "cd XC-VIDEO && npm install && npm run build",
     "build": "npm run build:video && vite build",
+    "vercel-build": "prisma generate && npm run build",
     "preview": "vite preview",
     "test:optimizer": "node --experimental-strip-types --test services/agents/prompt-optimizer/*.test.ts services/agents/utils/*.test.ts"
   },
