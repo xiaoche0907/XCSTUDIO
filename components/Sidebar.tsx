@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "../stores/useAuthStore";
 import { fetchWorkspaces } from "../services/workspaces/workspaces-api";
+import { setActiveWorkspace } from "../services/workspaces/active-workspace";
 
 interface SidebarProps {
   onNewProject?: () => void;
@@ -25,6 +26,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onNewProject }) => {
   const token = useAuthStore((s) => s.token);
   const workspace = useAuthStore((s) => s.workspace);
   const setWorkspace = useAuthStore((s) => s.setWorkspace);
+  const login = useAuthStore((s) => s.login);
 
   const [wsOpen, setWsOpen] = React.useState(false);
   const [wsLoading, setWsLoading] = React.useState(false);
@@ -101,8 +103,22 @@ const Sidebar: React.FC<SidebarProps> = ({ onNewProject }) => {
                         <button
                           key={w.id}
                           onClick={() => {
-                            setWorkspace({ id: w.id, name: w.name, role: w.role as any });
-                            setWsOpen(false);
+                            (async () => {
+                              try {
+                                if (!token) return;
+                                const res = await setActiveWorkspace(token, w.id);
+                                const cur = useAuthStore.getState();
+                                login(
+                                  cur.user?.email || '',
+                                  res.token,
+                                  cur.user || undefined,
+                                  res.workspace
+                                );
+                                setWorkspace({ id: w.id, name: w.name, role: w.role as any });
+                              } finally {
+                                setWsOpen(false);
+                              }
+                            })();
                           }}
                           className={`w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-left transition ${
                             active ? 'bg-gray-900 text-white' : 'hover:bg-gray-50'

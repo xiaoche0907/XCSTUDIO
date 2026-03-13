@@ -8,9 +8,10 @@ import fs from 'fs';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { PrismaClient } from '@prisma/client';
-import { getRequestedWorkspaceId, handleLogin, handleMe, requireAdmin, requireAuth } from './auth';
+import { handleLogin, handleMe, requireAdmin, requireAuth, signAccessToken } from './auth';
 import { writeAuditLog } from './audit';
 import { z } from 'zod';
+import { resolveWorkspaceContext, requireWorkspaceWrite } from './tenancy';
 
 dotenv.config();
 
@@ -217,6 +218,33 @@ app.get('/api/workspaces', requireAuth(), async (req: ExRequest, res: ExResponse
 app.post('/api/proxy/ai', async (req: ExRequest, res: ExResponse) => {
     try {
         const { providerId, model, contents, config } = req.body;
+
+        const isImageInputUnsupportedError = (err: any): boolean => {
+            const msg = String(err?.response?.data?.error?.message || err?.message || err || '').toLowerCase();
+            return msg.includes('does not support image input')
+                || msg.includes('model does not support image')
+                || msg.includes('image input is not supported')
+                || msg.includes('cannot read "image')
+                || msg.includes('cannot read "image.png"');
+        };
+
+        const stripImageParts = (rawContents: any) => {
+            if (!Array.isArray(rawContents)) return rawContents;
+            return rawContents.map((c: any) => {
+                const parts = Array.isArray(c?.parts) ? c.parts : [];
+                const nextParts = parts.filter((p: any) => {
+                    const mime = String(p?.inlineData?.mimeType || p?.fileData?.mimeType || '').toLowerCase();
+                    const hasInlineImage = !!p?.inlineData?.data && (mime.startsWith('image/') || mime === '');
+                    const hasFileImage = !!p?.fileData?.fileUri && mime.startsWith('image/');
+                    const hasImageUrl = !!p?.image_url || !!p?.imageUrl;
+                    return !(hasInlineImage || hasFileImage || hasImageUrl);
+                });
+                return {
+                    ...c,
+                    parts: nextParts.length > 0 ? nextParts : [{ text: '用户上传了图片作为参考，请基于文本说明继续处理。' }],
+                };
+            });
+        };
         
         const providers: Record<string, { baseUrl: string, envKey: string }> = {
             'yunwu': { baseUrl: 'https://yunwu.ai', envKey: 'YUNWU_API_KEYS' },
@@ -240,30 +268,34 @@ app.post('/api/proxy/ai', async (req: ExRequest, res: ExResponse) => {
         const isGoogle = provider.baseUrl.includes('googleapis.com');
         const baseUrl = provider.baseUrl.replace(/\/+$/, '');
 
-        if (isGoogle) {
-            // 直接使用 axios 调用 Google Gemini API，规避 @google/genai 依赖库的 ESM 兼容性问题
+        const callProvider = async (requestContents: any) => {
             const url = `${baseUrl}/v1beta/models/${model}:generateContent?key=${apiKey}`;
-            const apiRes = await axios.post(url, {
-                contents,
-                ...config
-            }, {
-                headers: { 'Content-Type': 'application/json' },
-                timeout: 300000 
-            });
-            // 适配 Google API 的返回格式，使其与 SDK 以前期待的格式一致（或者直接返回原始 JSON）
-            return res.json(apiRes.data);
-        }
+            const apiRes = await axios.post(
+                url,
+                {
+                    contents: requestContents,
+                    ...config
+                },
+                {
+                    headers: { 'Content-Type': 'application/json' },
+                    timeout: 300000
+                }
+            );
+            return apiRes.data;
+        };
 
-        // 处理其他服务商 (yunwu, plato)
-        const url = `${baseUrl}/v1beta/models/${model}:generateContent?key=${apiKey}`;
-        const apiRes = await axios.post(url, {
-            contents,
-            ...config
-        }, {
-            headers: { 'Content-Type': 'application/json' },
-            timeout: 300000 
-        });
-        return res.json(apiRes.data);
+        try {
+            const data = await callProvider(contents);
+            return res.json(data);
+        } catch (error: any) {
+            if (!isImageInputUnsupportedError(error)) throw error;
+            const textOnly = stripImageParts(contents);
+            const data = await callProvider(textOnly);
+            return res.json({
+                ...data,
+                warning: 'Model does not support image input; images were stripped and request was retried as text-only.'
+            });
+        }
     } catch (error: any) {
         console.error('[AI Proxy Error]:', error);
         res.status(error.response?.status || 500).json({ 
@@ -291,27 +323,23 @@ const updateProjectSchema = z.object({
 
 app.get('/api/projects', requireAuth(), async (req: ExRequest, res: ExResponse) => {
     const auth = (req as any).auth;
-    const userId = auth?.userId;
-    const requested = getRequestedWorkspaceId(req as any);
-    const workspaceId = requested || auth?.workspaceId;
     try {
         const client = getPrisma();
+        const ws = await resolveWorkspaceContext(client, req as any, auth);
         const projects = await client.project.findMany({
-            where: { userId, workspaceId },
+            where: { workspaceId: ws.workspaceId },
             orderBy: { updatedAt: 'desc' }
         });
         res.json(projects);
     } catch (error) {
         console.error('[Prisma Error]:', error);
-        res.status(500).json({ error: '获取项目失败，请检查数据库连接', details: error.message });
+        res.status(error.status || 500).json({ error: '获取项目失败', details: error.message, code: error.code });
     }
 });
 
 app.post('/api/projects', requireAuth(), async (req: ExRequest, res: ExResponse) => {
     const auth = (req as any).auth;
     const userId = auth?.userId;
-    const requested = getRequestedWorkspaceId(req as any);
-    const workspaceId = requested || auth?.workspaceId;
 
     const parsed = createProjectSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -320,6 +348,8 @@ app.post('/api/projects', requireAuth(), async (req: ExRequest, res: ExResponse)
 
     try {
         const client = getPrisma();
+        const ws = await resolveWorkspaceContext(client, req as any, auth);
+        requireWorkspaceWrite(ws.role);
         const created = await client.project.create({
             data: {
                 name: parsed.data.name,
@@ -327,12 +357,12 @@ app.post('/api/projects', requireAuth(), async (req: ExRequest, res: ExResponse)
                 thumbnail: parsed.data.thumbnail,
                 content: parsed.data.content,
                 userId,
-                workspaceId,
+                workspaceId: ws.workspaceId,
             },
         });
 
         await writeAuditLog(client, req as any, {
-            workspaceId,
+            workspaceId: ws.workspaceId,
             actorUserId: userId,
             action: 'project.create',
             entityType: 'Project',
@@ -343,15 +373,13 @@ app.post('/api/projects', requireAuth(), async (req: ExRequest, res: ExResponse)
         return res.status(201).json(created);
     } catch (error: any) {
         console.error('[Prisma Error]:', error);
-        return res.status(500).json({ error: '创建项目失败', details: error.message });
+        return res.status(error.status || 500).json({ error: '创建项目失败', details: error.message, code: error.code });
     }
 });
 
 app.put('/api/projects/:id', requireAuth(), async (req: ExRequest, res: ExResponse) => {
     const auth = (req as any).auth;
     const userId = auth?.userId;
-    const requested = getRequestedWorkspaceId(req as any);
-    const workspaceId = requested || auth?.workspaceId;
     const projectId = req.params.id;
 
     const parsed = updateProjectSchema.safeParse(req.body);
@@ -361,7 +389,10 @@ app.put('/api/projects/:id', requireAuth(), async (req: ExRequest, res: ExRespon
 
     try {
         const client = getPrisma();
-        const existing = await client.project.findFirst({ where: { id: projectId, workspaceId, userId } });
+        const ws = await resolveWorkspaceContext(client, req as any, auth);
+        requireWorkspaceWrite(ws.role);
+
+        const existing = await client.project.findFirst({ where: { id: projectId, workspaceId: ws.workspaceId } });
         if (!existing) return res.status(404).json({ error: 'Project not found' });
 
         const updated = await client.project.update({
@@ -375,7 +406,7 @@ app.put('/api/projects/:id', requireAuth(), async (req: ExRequest, res: ExRespon
         });
 
         await writeAuditLog(client, req as any, {
-            workspaceId,
+            workspaceId: ws.workspaceId,
             actorUserId: userId,
             action: 'project.update',
             entityType: 'Project',
@@ -386,26 +417,27 @@ app.put('/api/projects/:id', requireAuth(), async (req: ExRequest, res: ExRespon
         return res.json(updated);
     } catch (error: any) {
         console.error('[Prisma Error]:', error);
-        return res.status(500).json({ error: '更新项目失败', details: error.message });
+        return res.status(error.status || 500).json({ error: '更新项目失败', details: error.message, code: error.code });
     }
 });
 
 app.delete('/api/projects/:id', requireAuth(), async (req: ExRequest, res: ExResponse) => {
     const auth = (req as any).auth;
     const userId = auth?.userId;
-    const requested = getRequestedWorkspaceId(req as any);
-    const workspaceId = requested || auth?.workspaceId;
     const projectId = req.params.id;
 
     try {
         const client = getPrisma();
-        const existing = await client.project.findFirst({ where: { id: projectId, workspaceId, userId } });
+        const ws = await resolveWorkspaceContext(client, req as any, auth);
+        requireWorkspaceWrite(ws.role);
+
+        const existing = await client.project.findFirst({ where: { id: projectId, workspaceId: ws.workspaceId } });
         if (!existing) return res.status(404).json({ error: 'Project not found' });
 
         await client.project.delete({ where: { id: projectId } });
 
         await writeAuditLog(client, req as any, {
-            workspaceId,
+            workspaceId: ws.workspaceId,
             actorUserId: userId,
             action: 'project.delete',
             entityType: 'Project',
@@ -416,7 +448,65 @@ app.delete('/api/projects/:id', requireAuth(), async (req: ExRequest, res: ExRes
         return res.status(204).end();
     } catch (error: any) {
         console.error('[Prisma Error]:', error);
-        return res.status(500).json({ error: '删除项目失败', details: error.message });
+        return res.status(error.status || 500).json({ error: '删除项目失败', details: error.message, code: error.code });
+    }
+});
+
+const setActiveWorkspaceSchema = z.object({
+    workspaceId: z.string().trim().min(1),
+});
+
+app.post('/api/workspaces/active', requireAuth(), async (req: ExRequest, res: ExResponse) => {
+    const auth = (req as any).auth;
+    const parsed = setActiveWorkspaceSchema.safeParse(req.body);
+    if (!parsed.success) {
+        return res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten() });
+    }
+
+    try {
+        const client = getPrisma();
+        // Enforce membership
+        const membership = await client.workspaceMembership.findUnique({
+            where: { workspaceId_userId: { workspaceId: parsed.data.workspaceId, userId: auth.userId } },
+            select: { role: true, workspace: { select: { id: true, name: true } } },
+        });
+        if (!membership) {
+            return res.status(403).json({ error: 'Workspace access denied' });
+        }
+
+        await client.user.update({
+            where: { id: auth.userId },
+            data: { defaultWorkspaceId: parsed.data.workspaceId },
+        });
+
+        const token = signAccessToken({
+            userId: auth.userId,
+            email: auth.email,
+            role: auth.role,
+            workspaceId: membership.workspace.id,
+            workspaceRole: membership.role as any,
+        });
+
+        await writeAuditLog(client, req as any, {
+            workspaceId: membership.workspace.id,
+            actorUserId: auth.userId,
+            action: 'workspace.setActive',
+            entityType: 'Workspace',
+            entityId: membership.workspace.id,
+            meta: { name: membership.workspace.name },
+        });
+
+        return res.json({
+            token,
+            workspace: {
+                id: membership.workspace.id,
+                name: membership.workspace.name,
+                role: membership.role,
+            },
+        });
+    } catch (error: any) {
+        console.error('[Workspaces Active Error]:', error);
+        return res.status(error.status || 500).json({ error: 'Failed to set active workspace', details: error.message, code: error.code });
     }
 });
 
