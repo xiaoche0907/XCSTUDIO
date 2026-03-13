@@ -14,7 +14,7 @@ import { SettingsModal } from '../components/SettingsModal';
 import Sidebar from '../components/Sidebar';
 import { createNewWorkspacePath, workspacePath } from '../utils/routes';
 import { useAuthStore } from '../stores/useAuthStore';
-import { fetchProjects } from '../services/projects/projects-api';
+import { fetchProjects, deleteProjectApi, updateProject } from '../services/projects/projects-api';
 
 const toMemoryKey = (workspaceId: string, conversationId: string): string => {
   if (!workspaceId || !conversationId) return conversationId;
@@ -257,6 +257,12 @@ const Projects: React.FC<{ onExit?: () => void }> = ({ onExit }) => {
   const handleDelete = async (id: string, e?: React.MouseEvent) => {
       e?.stopPropagation();
       if (confirm('确定要删除这个项目吗？此操作无法撤销。')) {
+          if (token) {
+              await deleteProjectApi(token, id);
+              await loadProjects();
+              return;
+          }
+
           const project = await getProject(id);
           const conversations = project?.conversations || [];
           for (const conversation of conversations) {
@@ -272,6 +278,10 @@ const Projects: React.FC<{ onExit?: () => void }> = ({ onExit }) => {
       if (selectedIds.size === 0) return;
       if (confirm(`确定要删除选中的 ${selectedIds.size} 个项目吗？`)) {
           for (const id of selectedIds) {
+              if (token) {
+                  await deleteProjectApi(token, id);
+                  continue;
+              }
               const project = await getProject(id);
               const conversations = project?.conversations || [];
               for (const conversation of conversations) {
@@ -289,6 +299,11 @@ const Projects: React.FC<{ onExit?: () => void }> = ({ onExit }) => {
   const handleRename = async (id: string, newName: string) => {
       const project = projects.find(p => p.id === id);
       if (project) {
+          if (token) {
+              await updateProject(token, id, { name: newName });
+              await loadProjects();
+              return;
+          }
           await saveProject({ ...project, title: newName });
           await loadProjects();
       }

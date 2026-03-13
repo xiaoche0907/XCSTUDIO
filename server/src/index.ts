@@ -9,6 +9,8 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { PrismaClient } from '@prisma/client';
 import { handleLogin, handleMe, requireAdmin, requireAuth } from './auth';
+import { writeAuditLog } from './audit';
+import { z } from 'zod';
 
 dotenv.config();
 
@@ -245,6 +247,20 @@ app.post('/api/proxy/ai', async (req: ExRequest, res: ExResponse) => {
 
 import { searchHandler } from './search';
 
+const createProjectSchema = z.object({
+    name: z.string().trim().min(1).max(120),
+    description: z.string().trim().max(2000).optional(),
+    thumbnail: z.string().trim().max(4096).optional(),
+    content: z.any().optional(),
+});
+
+const updateProjectSchema = z.object({
+    name: z.string().trim().min(1).max(120).optional(),
+    description: z.string().trim().max(2000).optional().nullable(),
+    thumbnail: z.string().trim().max(4096).optional().nullable(),
+    content: z.any().optional().nullable(),
+});
+
 app.get('/api/projects', requireAuth(), async (req: ExRequest, res: ExResponse) => {
     const auth = (req as any).auth;
     const userId = auth?.userId;
@@ -259,6 +275,116 @@ app.get('/api/projects', requireAuth(), async (req: ExRequest, res: ExResponse) 
     } catch (error) {
         console.error('[Prisma Error]:', error);
         res.status(500).json({ error: '获取项目失败，请检查数据库连接', details: error.message });
+    }
+});
+
+app.post('/api/projects', requireAuth(), async (req: ExRequest, res: ExResponse) => {
+    const auth = (req as any).auth;
+    const userId = auth?.userId;
+    const workspaceId = auth?.workspaceId;
+
+    const parsed = createProjectSchema.safeParse(req.body);
+    if (!parsed.success) {
+        return res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten() });
+    }
+
+    try {
+        const client = getPrisma();
+        const created = await client.project.create({
+            data: {
+                name: parsed.data.name,
+                description: parsed.data.description,
+                thumbnail: parsed.data.thumbnail,
+                content: parsed.data.content,
+                userId,
+                workspaceId,
+            },
+        });
+
+        await writeAuditLog(client, req as any, {
+            workspaceId,
+            actorUserId: userId,
+            action: 'project.create',
+            entityType: 'Project',
+            entityId: created.id,
+            meta: { name: created.name },
+        });
+
+        return res.status(201).json(created);
+    } catch (error: any) {
+        console.error('[Prisma Error]:', error);
+        return res.status(500).json({ error: '创建项目失败', details: error.message });
+    }
+});
+
+app.put('/api/projects/:id', requireAuth(), async (req: ExRequest, res: ExResponse) => {
+    const auth = (req as any).auth;
+    const userId = auth?.userId;
+    const workspaceId = auth?.workspaceId;
+    const projectId = req.params.id;
+
+    const parsed = updateProjectSchema.safeParse(req.body);
+    if (!parsed.success) {
+        return res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten() });
+    }
+
+    try {
+        const client = getPrisma();
+        const existing = await client.project.findFirst({ where: { id: projectId, workspaceId, userId } });
+        if (!existing) return res.status(404).json({ error: 'Project not found' });
+
+        const updated = await client.project.update({
+            where: { id: projectId },
+            data: {
+                ...(parsed.data.name !== undefined ? { name: parsed.data.name } : {}),
+                ...(parsed.data.description !== undefined ? { description: parsed.data.description } : {}),
+                ...(parsed.data.thumbnail !== undefined ? { thumbnail: parsed.data.thumbnail } : {}),
+                ...(parsed.data.content !== undefined ? { content: parsed.data.content } : {}),
+            },
+        });
+
+        await writeAuditLog(client, req as any, {
+            workspaceId,
+            actorUserId: userId,
+            action: 'project.update',
+            entityType: 'Project',
+            entityId: updated.id,
+            meta: { before: { name: existing.name }, after: { name: updated.name } },
+        });
+
+        return res.json(updated);
+    } catch (error: any) {
+        console.error('[Prisma Error]:', error);
+        return res.status(500).json({ error: '更新项目失败', details: error.message });
+    }
+});
+
+app.delete('/api/projects/:id', requireAuth(), async (req: ExRequest, res: ExResponse) => {
+    const auth = (req as any).auth;
+    const userId = auth?.userId;
+    const workspaceId = auth?.workspaceId;
+    const projectId = req.params.id;
+
+    try {
+        const client = getPrisma();
+        const existing = await client.project.findFirst({ where: { id: projectId, workspaceId, userId } });
+        if (!existing) return res.status(404).json({ error: 'Project not found' });
+
+        await client.project.delete({ where: { id: projectId } });
+
+        await writeAuditLog(client, req as any, {
+            workspaceId,
+            actorUserId: userId,
+            action: 'project.delete',
+            entityType: 'Project',
+            entityId: existing.id,
+            meta: { name: existing.name },
+        });
+
+        return res.status(204).end();
+    } catch (error: any) {
+        console.error('[Prisma Error]:', error);
+        return res.status(500).json({ error: '删除项目失败', details: error.message });
     }
 });
 
