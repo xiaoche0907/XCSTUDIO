@@ -26,6 +26,9 @@ verify_url.ps1
 info_output.txt
 error*.json
 
+# temp scratch
+repo_temp/
+
 # Local deploy/debug scripts
 deploy.ps1
 deploy.sh
