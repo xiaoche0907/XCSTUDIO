@@ -26,6 +26,22 @@ process.on('unhandledRejection', (reason, promise) => {
 const app = express();
 const port = Number(process.env.PORT || 9000);
 
+// Debug middleware: return request shape early when header is present.
+// NOTE: Safe to keep enabled; it only activates with an explicit header.
+app.use((req: any, res: any, next: any) => {
+    if (req?.headers?.['x-xc-debug'] === '1') {
+        return res.json({
+            method: req.method,
+            url: req.url,
+            originalUrl: req.originalUrl,
+            path: req.path,
+            baseUrl: req.baseUrl,
+            headers: req.headers,
+        });
+    }
+    return next();
+});
+
 let prisma: PrismaClient;
 
 const getPrisma = () => {
