@@ -12,7 +12,7 @@ resources:
     component: fc3
     props:
       region: ${vars.region}
-      handler: bundle.handler
+      handler: dist/bundle.handler
       functionName: ${vars.functionName}
       runtime: nodejs20
       description: "XC-STUDIO SaaS Backend (Shielded Version)"
