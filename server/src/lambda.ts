@@ -78,6 +78,15 @@ const normalizeToApiGatewayV1 = (event: any) => {
 };
 
 export const handler = async (event: any, context: any) => {
+  // HTTP trigger mode on FC can call the handler as (req, res, context).
+  // In that case, just hand off to Express directly.
+  if (event && typeof event === 'object' && typeof event.method === 'string' && typeof event.url === 'string') {
+    // `context` is actually `res` in this signature.
+    if (context && typeof context.setHeader === 'function') {
+      return (app as any)(event, context);
+    }
+  }
+
   let normalized = event;
   if (typeof event === 'string') {
     const trimmed = event.trim();
