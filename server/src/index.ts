@@ -48,6 +48,52 @@ const corsOrigins = (process.env.CORS_ORIGINS || '')
 
 app.set('trust proxy', 1);
 
+// FC/Proxy compatibility: Some trigger modes may not preserve the original path in req.url.
+// Try to recover path from common forwarding headers before route matching.
+app.use((req, _res, next) => {
+    const pickHeader = (name: string): string | null => {
+        const v = (req.headers as any)[name];
+        if (!v) return null;
+        if (Array.isArray(v)) return typeof v[0] === 'string' ? v[0] : null;
+        return typeof v === 'string' ? v : null;
+    };
+
+    const candidates = [
+        'x-fc-request-uri',
+        'x-fc-request-path',
+        'x-fc-http-path',
+        'x-forwarded-uri',
+        'x-forwarded-path',
+        'x-original-url',
+        'x-original-uri',
+        'x-request-uri',
+    ];
+
+    let uri: string | null = null;
+    for (const k of candidates) {
+        uri = pickHeader(k);
+        if (uri) break;
+    }
+
+    if (uri) {
+        try {
+            // Normalize absolute URLs
+            if (uri.startsWith('http://') || uri.startsWith('https://')) {
+                const u = new URL(uri);
+                uri = `${u.pathname}${u.search || ''}`;
+            }
+
+            if (uri.startsWith('/') && req.url !== uri) {
+                (req as any).url = uri;
+            }
+        } catch {
+            // ignore
+        }
+    }
+
+    next();
+});
+
 app.use(
     cors({
         origin: (origin, cb) => {
@@ -154,7 +200,7 @@ app.use((req, res, next) => {
     next();
 });
 
-app.use(express.static(publicPath));
+app.use(express.static(publicPath, { index: false }));
 
 // Explicit health check AFTER static so it never gets rewritten
 app.get('/health', (req: ExRequest, res: ExResponse) => {
@@ -164,6 +210,40 @@ app.get('/health', (req: ExRequest, res: ExResponse) => {
 
 // 显式处理根路径
 app.get('/', (req, res) => {
+    // On FC, some trigger modes may not preserve the original path.
+    // Allow a safe debug mode to inspect path-related headers.
+    if (req.headers['x-xc-debug'] === '1') {
+        const pick = (h: Record<string, any>, keys: string[]) => {
+            const out: Record<string, any> = {};
+            for (const k of keys) {
+                if (h[k] !== undefined) out[k] = h[k];
+            }
+            return out;
+        };
+        return res.json({
+            method: req.method,
+            url: (req as any).url,
+            originalUrl: (req as any).originalUrl,
+            path: (req as any).path,
+            headers: pick(req.headers as any, [
+                'host',
+                'x-forwarded-proto',
+                'x-forwarded-host',
+                'x-forwarded-port',
+                'x-forwarded-for',
+                'x-forwarded-uri',
+                'x-forwarded-path',
+                'x-original-url',
+                'x-original-uri',
+                'x-request-uri',
+                'x-fc-request-uri',
+                'x-fc-http-path',
+                'x-fc-request-path',
+                'x-fc-url',
+                'x-fc-event',
+            ]),
+        });
+    }
     res.sendFile(path.join(publicPath, 'index.html'));
 });
 
@@ -556,10 +636,6 @@ app.get('/api/admin/users', requireAuth(), requireAdmin(), async (req: ExRequest
         res.status(500).json({ error: '获取用户列表失败', details: error.message });
     }
 });
-
-// 静态资源服务 - 映射到 public 目录
-app.use(express.static(publicPath));
-
 
 // 处理前端路由 - SPA 特性支持
 app.get('*', (req, res) => {
