@@ -32,4 +32,10 @@ info*.txt
 final_*.txt
 final_*.log
 
+# Serverless info/debug yaml
+s.*.yaml
+
+# Test pages
+public/test.html
+
 /src/generated/prisma

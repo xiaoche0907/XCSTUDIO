@@ -26,6 +26,13 @@ verify_url.ps1
 info_output.txt
 error*.json
 
+# Local deploy/debug scripts
+deploy.ps1
+deploy.sh
+deep_check.ps1
+get_official_info.ps1
+s-frontend.yaml
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
