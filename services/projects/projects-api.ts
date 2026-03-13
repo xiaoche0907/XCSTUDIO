@@ -1,12 +1,20 @@
 import type { Project } from '../../types/common';
 import { fetchWithResilience } from '../http/api-client';
 
-export async function fetchProjects(token: string): Promise<Project[]> {
+const buildHeaders = (token: string, workspaceId?: string | null): Record<string, string> => {
+  const headers: Record<string, string> = {
+    'Authorization': `Bearer ${token}`,
+  };
+  if (workspaceId) headers['x-workspace-id'] = workspaceId;
+  return headers;
+};
+
+export async function fetchProjects(token: string, workspaceId?: string | null): Promise<Project[]> {
   const res = await fetchWithResilience(
     '/api/projects',
     {
       headers: {
-        'Authorization': `Bearer ${token}`,
+        ...buildHeaders(token, workspaceId),
       },
     },
     { operation: 'projects.list', retries: 0 }
@@ -20,14 +28,14 @@ export async function fetchProjects(token: string): Promise<Project[]> {
   return data as Project[];
 }
 
-export async function createProject(token: string, input: { name: string; description?: string; thumbnail?: string; content?: any }): Promise<any> {
+export async function createProject(token: string, workspaceId: string | null | undefined, input: { name: string; description?: string; thumbnail?: string; content?: any }): Promise<any> {
   const res = await fetchWithResilience(
     '/api/projects',
     {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
+        ...buildHeaders(token, workspaceId),
       },
       body: JSON.stringify(input),
     },
@@ -41,14 +49,14 @@ export async function createProject(token: string, input: { name: string; descri
   return data;
 }
 
-export async function updateProject(token: string, id: string, input: Partial<{ name: string; description: string | null; thumbnail: string | null; content: any | null }>): Promise<any> {
+export async function updateProject(token: string, workspaceId: string | null | undefined, id: string, input: Partial<{ name: string; description: string | null; thumbnail: string | null; content: any | null }>): Promise<any> {
   const res = await fetchWithResilience(
     `/api/projects/${encodeURIComponent(id)}`,
     {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
+        ...buildHeaders(token, workspaceId),
       },
       body: JSON.stringify(input),
     },
@@ -62,13 +70,13 @@ export async function updateProject(token: string, id: string, input: Partial<{ 
   return data;
 }
 
-export async function deleteProjectApi(token: string, id: string): Promise<void> {
+export async function deleteProjectApi(token: string, workspaceId: string | null | undefined, id: string): Promise<void> {
   const res = await fetchWithResilience(
     `/api/projects/${encodeURIComponent(id)}`,
     {
       method: 'DELETE',
       headers: {
-        'Authorization': `Bearer ${token}`,
+        ...buildHeaders(token, workspaceId),
       },
     },
     { operation: 'projects.delete', retries: 0 }

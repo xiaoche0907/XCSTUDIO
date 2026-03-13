@@ -8,7 +8,7 @@ import fs from 'fs';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { PrismaClient } from '@prisma/client';
-import { handleLogin, handleMe, requireAdmin, requireAuth } from './auth';
+import { getRequestedWorkspaceId, handleLogin, handleMe, requireAdmin, requireAuth } from './auth';
 import { writeAuditLog } from './audit';
 import { z } from 'zod';
 
@@ -292,7 +292,8 @@ const updateProjectSchema = z.object({
 app.get('/api/projects', requireAuth(), async (req: ExRequest, res: ExResponse) => {
     const auth = (req as any).auth;
     const userId = auth?.userId;
-    const workspaceId = auth?.workspaceId;
+    const requested = getRequestedWorkspaceId(req as any);
+    const workspaceId = requested || auth?.workspaceId;
     try {
         const client = getPrisma();
         const projects = await client.project.findMany({
@@ -309,7 +310,8 @@ app.get('/api/projects', requireAuth(), async (req: ExRequest, res: ExResponse) 
 app.post('/api/projects', requireAuth(), async (req: ExRequest, res: ExResponse) => {
     const auth = (req as any).auth;
     const userId = auth?.userId;
-    const workspaceId = auth?.workspaceId;
+    const requested = getRequestedWorkspaceId(req as any);
+    const workspaceId = requested || auth?.workspaceId;
 
     const parsed = createProjectSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -348,7 +350,8 @@ app.post('/api/projects', requireAuth(), async (req: ExRequest, res: ExResponse)
 app.put('/api/projects/:id', requireAuth(), async (req: ExRequest, res: ExResponse) => {
     const auth = (req as any).auth;
     const userId = auth?.userId;
-    const workspaceId = auth?.workspaceId;
+    const requested = getRequestedWorkspaceId(req as any);
+    const workspaceId = requested || auth?.workspaceId;
     const projectId = req.params.id;
 
     const parsed = updateProjectSchema.safeParse(req.body);
@@ -390,7 +393,8 @@ app.put('/api/projects/:id', requireAuth(), async (req: ExRequest, res: ExRespon
 app.delete('/api/projects/:id', requireAuth(), async (req: ExRequest, res: ExResponse) => {
     const auth = (req as any).auth;
     const userId = auth?.userId;
-    const workspaceId = auth?.workspaceId;
+    const requested = getRequestedWorkspaceId(req as any);
+    const workspaceId = requested || auth?.workspaceId;
     const projectId = req.params.id;
 
     try {

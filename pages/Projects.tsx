@@ -217,11 +217,12 @@ const Projects: React.FC<{ onExit?: () => void }> = ({ onExit }) => {
   const [searchQuery, setSearchQuery] = useState('');
 
   const token = useAuthStore((s) => s.token);
+  const workspaceId = useAuthStore((s) => s.workspace?.id);
 
   const loadProjects = async () => {
       // Prefer SaaS backend when authenticated, fallback to local IndexedDB for offline/dev.
       if (token) {
-        const loaded = await fetchProjects(token);
+        const loaded = await fetchProjects(token, workspaceId);
         setProjects(loaded);
         return;
       }
@@ -231,7 +232,7 @@ const Projects: React.FC<{ onExit?: () => void }> = ({ onExit }) => {
 
   useEffect(() => {
     loadProjects();
-  }, [token]);
+  }, [token, workspaceId]);
 
   const handleSelect = (id: string) => {
       const newSelected = new Set(selectedIds);
@@ -258,7 +259,7 @@ const Projects: React.FC<{ onExit?: () => void }> = ({ onExit }) => {
       e?.stopPropagation();
       if (confirm('确定要删除这个项目吗？此操作无法撤销。')) {
           if (token) {
-              await deleteProjectApi(token, id);
+              await deleteProjectApi(token, workspaceId, id);
               await loadProjects();
               return;
           }
@@ -279,7 +280,7 @@ const Projects: React.FC<{ onExit?: () => void }> = ({ onExit }) => {
       if (confirm(`确定要删除选中的 ${selectedIds.size} 个项目吗？`)) {
           for (const id of selectedIds) {
               if (token) {
-                  await deleteProjectApi(token, id);
+                  await deleteProjectApi(token, workspaceId, id);
                   continue;
               }
               const project = await getProject(id);
@@ -300,7 +301,7 @@ const Projects: React.FC<{ onExit?: () => void }> = ({ onExit }) => {
       const project = projects.find(p => p.id === id);
       if (project) {
           if (token) {
-              await updateProject(token, id, { name: newName });
+              await updateProject(token, workspaceId, id, { name: newName });
               await loadProjects();
               return;
           }

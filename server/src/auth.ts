@@ -129,6 +129,13 @@ export const requireWorkspaceRole = (roles: Array<AuthContext['workspaceRole']>)
   };
 };
 
+export const getRequestedWorkspaceId = (req: Request): string | null => {
+  const h = req.headers['x-workspace-id'];
+  if (!h) return null;
+  if (Array.isArray(h)) return typeof h[0] === 'string' ? h[0] : null;
+  return typeof h === 'string' ? h : null;
+};
+
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6).max(128),
