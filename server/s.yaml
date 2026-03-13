@@ -5,7 +5,7 @@ access: default
 
 vars:
   region: "cn-hongkong"
-  functionName: "xc-studio-app-v2" # 重命名以强制刷新运行环境
+  functionName: "xc-studio-v3" # stable production function
 
 resources:
   backend:
