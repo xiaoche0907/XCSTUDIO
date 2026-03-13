@@ -16,6 +16,15 @@ dist-ssr
 .env
 .env.local
 .env.*.local
+.env.*
+
+# Serverless/Deployment scratch files
+deploy_*.ps1
+deploy_*.sh
+get_info*.ps1
+verify_url.ps1
+info_output.txt
+error*.json
 
 # Editor directories and files
 .vscode/*

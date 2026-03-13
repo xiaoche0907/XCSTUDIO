@@ -6,6 +6,7 @@ export const ROUTES = {
   workspaceNew: '/workspace-new',
   videoWorkspace: '/video-workspace',
   settings: '/settings',
+  login: '/login',
 } as const;
 
 export const workspacePath = (id: string) => `${ROUTES.workspace}/${id}`;

@@ -1,0 +1,35 @@
+node_modules
+# Keep environment variables out of version control
+.env
+.env.*
+!.env.example
+
+# Build output / bundles
+dist
+bundle.js
+
+# Built static assets (served in production, but not source)
+public/assets
+public/xc-video/assets
+
+# Optional: if frontend build artifacts are copied into server/public,
+# keep only HTML entrypoints under version control.
+public/xc-video/*
+!public/xc-video/index.html
+
+# Serverless deployment state
+.s/
+*.cache
+
+# Deploy logs / diagnostics
+deploy_*.log
+deploy_*.txt
+deploy_*.yaml
+full_info.log
+deploy_error.log
+deploy_info.txt
+info*.txt
+final_*.txt
+final_*.log
+
+/src/generated/prisma

@@ -6,6 +6,8 @@ import { safeLocalStorageSetItem } from '../utils/safe-storage';
 import { getApiKey, getProviderConfig } from './provider-config';
 import { normalizeReferenceToDataUrl } from './image-reference-resolver';
 
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || ''; // 后端代理地址
+
 const isNetworkFetchError = (error: unknown): boolean => {
     const msg = ((error as any)?.message || '').toLowerCase();
     return msg.includes('failed to fetch') || msg.includes('network') || msg.includes('cors') || msg.includes('load failed');
@@ -186,26 +188,55 @@ export const generateJsonResponse = async (
 
     const provider = getProviderConfig();
     const baseUrl = normalizeUrl(provider.baseUrl || '');
-    const isGoogleDirect = provider.id === 'gemini' || !baseUrl || baseUrl.includes('googleapis.com');
-
-    if (isGoogleDirect) {
-        const response = await getClient().models.generateContent({
-            model,
-            contents: { parts },
-            config: {
-                temperature,
-                responseMimeType: 'application/json',
-                ...(responseSchema ? { responseSchema } : {}),
-                ...(tools && tools.length > 0 ? { tools } : {})
+    
+    // 如果配置了后端 URL，则优先走后端代理（SaaS 模式）
+    const shouldUseBackendProxy = !!BACKEND_URL || process.env.NODE_ENV === 'production';
+    if (shouldUseBackendProxy) {
+        const proxyUrl = `${BACKEND_URL || ''}/api/proxy/ai`;
+        try {
+            const token = localStorage.getItem('auth_token');
+            if (!token) {
+                throw new Error('Not authenticated');
             }
-        });
+            const res = await fetch(proxyUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    providerId: provider.id,
+                    model,
+                    contents: parts,
+                    config: {
+                        temperature,
+                        responseMimeType: 'application/json',
+                        ...(responseSchema ? { responseSchema } : {}),
+                        ...(tools && tools.length > 0 ? { tools } : {})
+                    }
+                })
+            });
 
-        return {
-            text: response.text || '{}',
-            candidates: response.candidates as any,
-            raw: response as any
-        };
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.error || `后端代理请求失败: ${res.status}`);
+            }
+
+            const response = await res.json();
+            // 兼容后端返回的 SDK 响应格式
+            return {
+                text: response.candidates?.[0]?.content?.parts?.[0]?.text || response.text || '{}',
+                candidates: response.candidates,
+                raw: response
+            };
+        } catch (error: any) {
+            console.error('[Backend Proxy Fallback]:', error);
+            // 失败时可以决定是否回退到前端直连，SaaS 模式下建议报错
+            throw error;
+        }
     }
+
+    const isGoogleDirect = provider.id === 'gemini' || !baseUrl || baseUrl.includes('googleapis.com');
 
     const apiKey = requireApiKey('generateJsonResponse');
     const openAIContent = toOpenAIMessageContent(parts);

@@ -1,0 +1,52 @@
+# XC-STUDIO Alibaba Cloud FC 3.0 Configuration
+edition: 3.0.0
+name: xc-studio-backend
+access: default
+
+vars:
+  region: "cn-hongkong"
+  functionName: "xc-studio-app-v2" # 重命名以强制刷新运行环境
+
+resources:
+  backend:
+    component: fc3
+    props:
+      region: ${vars.region}
+      handler: bundle.handler
+      functionName: ${vars.functionName}
+      runtime: nodejs20
+      description: "XC-STUDIO SaaS Backend (Shielded Version)"
+      timeout: 120
+      memorySize: 512
+      cpu: 0.5
+      diskSize: 512
+      environmentVariables:
+        NODE_ENV: production
+        # IMPORTANT: Configure secrets in FC console (encrypted env vars).
+        # Required
+        # JWT_SECRET: "<set-in-fc-console>"
+        # DATABASE_URL: "<set-in-fc-console>"
+        # YUNWU_API_KEYS: "<set-in-fc-console>"
+        # PLATO_API_KEYS: "<set-in-fc-console>"
+        # Optional
+        # GEMINI_API_KEY: "<set-in-fc-console>"
+        # ADMIN_EMAILS: "admin@example.com"
+        # ADMIN_TOKEN: "<set-in-fc-console>"
+        # CORS_ORIGINS: "https://xcwork-tool.online"
+      code: ./
+      customDomains:
+        - domainName: xcwork-tool.online
+          protocol: HTTPS
+          routeConfigs:
+            - path: /*
+              functionName: ${vars.functionName}
+      triggers:
+        - triggerName: httpTrigger
+          triggerType: http
+          triggerConfig:
+            authType: anonymous
+            methods:
+              - GET
+              - POST
+              - PUT
+              - DELETE

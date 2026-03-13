@@ -55,8 +55,20 @@ export const Landing = () => {
         return () => clearInterval(timer);
     }, []);
 
+    const [isLoggedIn, setIsLoggedIn] = useState(false); // 兼容旧版 localStorage
+
+    useEffect(() => {
+        // 模拟检查登录状态
+        const token = localStorage.getItem('auth_token');
+        if (token) setIsLoggedIn(true);
+    }, []);
+
     const handleStart = () => {
-        navigate(`/dashboard`);
+        if (!isLoggedIn) {
+            navigate('/login');
+        } else {
+            navigate(`/dashboard`);
+        }
     };
 
     const currentSlide = slides[currentSlideIndex];

@@ -1,0 +1,51 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  clerkId       String?   @unique
+  email         String    @unique
+  name          String?
+  role          UserRole  @default(USER)
+  passwordHash  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  projects      Project[]
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+model Project {
+  id            String    @id @default(cuid())
+  name          String
+  description   String?
+  thumbnail     String?
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+  content       Json?     // 存储工作区状态/历史
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+model Asset {
+  id            String    @id @default(cuid())
+  url           String
+  type          String    // image, video
+  userId        String
+  projectId     String?
+  createdAt     DateTime  @default(now())
+}
