@@ -13,6 +13,8 @@ import { AnimatePresence } from 'framer-motion';
 import { SettingsModal } from '../components/SettingsModal';
 import Sidebar from '../components/Sidebar';
 import { createNewWorkspacePath, workspacePath } from '../utils/routes';
+import { useAuthStore } from '../stores/useAuthStore';
+import { fetchProjects } from '../services/projects/projects-api';
 
 const toMemoryKey = (workspaceId: string, conversationId: string): string => {
   if (!workspaceId || !conversationId) return conversationId;
@@ -214,14 +216,22 @@ const Projects: React.FC<{ onExit?: () => void }> = ({ onExit }) => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
 
+  const token = useAuthStore((s) => s.token);
+
   const loadProjects = async () => {
+      // Prefer SaaS backend when authenticated, fallback to local IndexedDB for offline/dev.
+      if (token) {
+        const loaded = await fetchProjects(token);
+        setProjects(loaded);
+        return;
+      }
       const loadedProjects = await getProjects();
       setProjects(loadedProjects);
   };
 
   useEffect(() => {
     loadProjects();
-  }, []);
+  }, [token]);
 
   const handleSelect = (id: string) => {
       const newSelected = new Set(selectedIds);
